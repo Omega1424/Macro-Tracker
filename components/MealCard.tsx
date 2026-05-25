@@ -30,7 +30,7 @@ export default function MealCard({ meal, items, foods, onAdd, onRemove, onAddNew
   );
 
   return (
-    <div className="bg-surface border border-border-soft rounded-2xl overflow-hidden
+    <div className="bg-surface border border-border-soft rounded-2xl
                     shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]
                     transition-shadow duration-200">
 
