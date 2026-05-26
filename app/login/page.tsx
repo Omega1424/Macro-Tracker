@@ -126,6 +126,9 @@ export default function LoginPage() {
                 placeholder="you@example.com"
                 autoFocus
                 required
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 className="border border-border rounded-[10px] px-3 py-2.5 text-sm bg-bg text-text
                            placeholder-text-muted focus:outline-none focus:border-accent
                            focus:ring-2 focus:ring-accent/20 transition-colors"
@@ -143,6 +146,10 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 required
                 minLength={6}
+                autoCapitalize="none"
+                autoCorrect="off"
+                autoComplete="current-password"
+                spellCheck={false}
                 className="border border-border rounded-[10px] px-3 py-2.5 text-sm bg-bg text-text
                            placeholder-text-muted focus:outline-none focus:border-accent
                            focus:ring-2 focus:ring-accent/20 transition-colors"
