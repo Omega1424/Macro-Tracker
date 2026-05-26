@@ -4,17 +4,24 @@ import { useState, useRef, useEffect, KeyboardEvent } from "react";
 import type { Food } from "@/lib/foods";
 
 interface Props {
-  foods:        Food[];
-  onSelect:     (food: Food, amount: number) => void;
-  onAddNew:     (prefillName: string) => void;  // trigger AddFoodModal
+  foods:         Food[];
+  onSelect:      (food: Food, amount: number) => void;
+  onAddNew:      (prefillName: string) => void;
+  // Edit mode — pre-seed with an existing item
+  initialFood?:   Food;
+  initialAmount?: number;
+  submitLabel?:   string;
 }
 
-export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
-  const [query,     setQuery]     = useState("");
-  const [amount,    setAmount]    = useState<number | "">(100);
-  const [active,    setActive]    = useState(false);
-  const [cursor,    setCursor]    = useState(-1);
-  const [selected,  setSelected]  = useState<Food | null>(null);
+export default function FoodSearch({
+  foods, onSelect, onAddNew,
+  initialFood, initialAmount, submitLabel = "Add",
+}: Props) {
+  const [query,       setQuery]       = useState(initialFood?.name ?? "");
+  const [amount,      setAmount]      = useState<number | "">(initialAmount ?? initialFood?.serving ?? 100);
+  const [active,      setActive]      = useState(false);
+  const [cursor,      setCursor]      = useState(-1);
+  const [selected,    setSelected]    = useState<Food | null>(initialFood ?? null);
   const [useServings, setUseServings] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef  = useRef<HTMLUListElement>(null);
@@ -27,9 +34,8 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
 
   const showDropdown = active && query.trim().length > 0;
 
-  // When food is selected, default amount based on current mode
   useEffect(() => {
-    if (selected) setAmount(useServings ? 1 : selected.serving);
+    if (selected) setAmount(useServings ? 1 : (initialAmount ?? selected.serving));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
@@ -42,7 +48,6 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
     setTimeout(() => document.getElementById("food-amount")?.focus(), 0);
   };
 
-  // Actual grams/ml to pass to onSelect
   const resolvedAmount = selected && useServings
     ? Number(amount) * selected.serving
     : Number(amount);
@@ -50,10 +55,13 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
   const handleAdd = () => {
     if (!selected || !amount) return;
     onSelect(selected, resolvedAmount);
-    setSelected(null);
-    setQuery("");
-    setAmount(useServings ? 1 : 100);
-    inputRef.current?.focus();
+    if (!initialFood) {
+      // Only reset if not in edit mode
+      setSelected(null);
+      setQuery("");
+      setAmount(useServings ? 1 : 100);
+      inputRef.current?.focus();
+    }
   };
 
   const handleKey = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -78,7 +86,6 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
     }
   };
 
-  // Scroll active item into view
   useEffect(() => {
     if (cursor >= 0 && listRef.current) {
       const el = listRef.current.children[cursor] as HTMLElement | undefined;
@@ -114,7 +121,6 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
                      focus:ring-accent/20 transition-colors"
         />
 
-        {/* Dropdown */}
         {showDropdown && (
           <ul
             id="food-dropdown"
@@ -139,7 +145,6 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
               </li>
             ))}
 
-            {/* "Add to database" option when query has no match */}
             {query.trim() && filtered.length === 0 && (
               <li
                 role="option"
@@ -152,7 +157,6 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
               </li>
             )}
 
-            {/* "Add to database" row appended below results */}
             {query.trim() && filtered.length > 0 && (
               <li
                 role="option"
@@ -168,13 +172,12 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
         )}
       </div>
 
-      {/* Amount row — only shown once a food is selected */}
       {selected && (
         <div className="flex flex-col gap-1.5 animate-slide-up">
           {/* Mode toggle */}
           <div className="flex gap-1 bg-bg rounded-lg p-0.5 self-start border border-border-soft">
             <button
-              onClick={() => { setUseServings(false); setAmount(selected.serving); }}
+              onClick={() => { setUseServings(false); setAmount(initialAmount ?? selected.serving); }}
               className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
                 !useServings ? "bg-surface text-text shadow-sm" : "text-text-muted hover:text-text"
               }`}
@@ -207,9 +210,7 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
                            focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-colors"
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">
-                {useServings
-                  ? `× ${selected.serving}${selected.unit}`
-                  : selected.unit}
+                {useServings ? `× ${selected.serving}${selected.unit}` : selected.unit}
               </span>
             </div>
             <button
@@ -218,15 +219,12 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
               className="px-4 py-2 bg-accent text-white text-sm font-medium rounded-[10px]
                          hover:bg-accent-hover disabled:opacity-30 transition-colors focus-accent"
             >
-              Add
+              {submitLabel}
             </button>
           </div>
 
-          {/* Preview of resolved amount when in servings mode */}
           {useServings && amount && Number(amount) > 0 && (
-            <p className="text-xs text-text-muted">
-              = {resolvedAmount}{selected.unit}
-            </p>
+            <p className="text-xs text-text-muted">= {resolvedAmount}{selected.unit}</p>
           )}
         </div>
       )}

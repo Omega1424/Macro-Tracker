@@ -12,18 +12,20 @@ import { useTheme } from "@/lib/theme";
 
 import Header       from "@/components/Header";
 import DailySummary from "@/components/DailySummary";
-import MealCard, { type MealItem, makeMealItem } from "@/components/MealCard";
+import MealCard, { type Meal, type MealItem, makeMealItem } from "@/components/MealCard";
 import GoalsDrawer   from "@/components/GoalsDrawer";
 import AddFoodModal  from "@/components/AddFoodModal";
 
 /* ─────────────────────────────────────────────────────────── */
 
-const MEAL_NAMES = ["Breakfast", "Lunch", "Dinner", "Supper"] as const;
-type MealName = typeof MEAL_NAMES[number];
-type MealPlan = Record<MealName, MealItem[]>;
+const PRESET_MEAL_NAMES = ["Breakfast", "Lunch", "Dinner", "Supper", "Snack", "Pre-workout", "Post-workout"];
 
-function emptyPlan(): MealPlan {
-  return { Breakfast: [], Lunch: [], Dinner: [], Supper: [] };
+function genId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function emptyPlan(): Meal[] {
+  return [{ id: genId(), name: "Breakfast", items: [] }];
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -32,16 +34,19 @@ export default function HomePage() {
   const { data: session, status } = useSession({ required: true });
   const { pref: themePref, cycle: cycleTheme } = useTheme();
 
-  const [foods,       setFoods]       = useState<Food[]>([]);
-  const [meals,       setMeals]       = useState<MealPlan>(emptyPlan());
-  const [goals,       setGoals]       = useState<Goals>(DEFAULT_GOALS);
-  const [hydrated,    setHydrated]    = useState(false);
-  const [goalsOpen,   setGoalsOpen]   = useState(false);
-  const [addFoodOpen, setAddFoodOpen] = useState(false);
-  const [addPrefill,  setAddPrefill]  = useState("");
-  const [shareMsg,    setShareMsg]    = useState("");
+  const [foods,        setFoods]        = useState<Food[]>([]);
+  const [meals,        setMeals]        = useState<Meal[]>(emptyPlan());
+  const [goals,        setGoals]        = useState<Goals>(DEFAULT_GOALS);
+  const [hydrated,     setHydrated]     = useState(false);
+  const [goalsOpen,    setGoalsOpen]    = useState(false);
+  const [addFoodOpen,  setAddFoodOpen]  = useState(false);
+  const [addPrefill,   setAddPrefill]   = useState("");
+  const [shareMsg,     setShareMsg]     = useState("");
+  // Add-meal panel
+  const [addingMeal,   setAddingMeal]   = useState(false);
+  const [customName,   setCustomName]   = useState("");
+  const customInputRef = useRef<HTMLInputElement>(null);
 
-  // Debounce ref for saving meals
   const saveMealsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* ── Load foods ── */
@@ -52,19 +57,17 @@ export default function HomePage() {
       .catch(console.error);
   }, []);
 
-  /* ── Load user meals + goals once session is ready ── */
+  /* ── Load user meals + goals ── */
   useEffect(() => {
     if (status !== "authenticated") return;
 
-    // Load from hash URL first (shared links still work)
-    const fromHash = getHashPlan<MealPlan>();
+    const fromHash = getHashPlan<Meal[]>();
     if (fromHash) {
       setMeals(fromHash);
       setHydrated(true);
       return;
     }
 
-    // Load from API
     Promise.all([
       fetch("/api/user/meals").then((r) => r.ok ? r.json() : null),
       fetch("/api/user/goals").then((r) => r.ok ? r.json() : null),
@@ -75,17 +78,16 @@ export default function HomePage() {
     }).catch(() => setHydrated(true));
   }, [status]);
 
-  /* ── Persist meals (debounced 800ms) ── */
+  /* ── Persist meals (debounced) ── */
   useEffect(() => {
     if (!hydrated || status !== "authenticated") return;
     setHashPlan(meals);
-
     if (saveMealsTimer.current) clearTimeout(saveMealsTimer.current);
     saveMealsTimer.current = setTimeout(() => {
       fetch("/api/user/meals", {
-        method:  "PUT",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(meals),
+        body: JSON.stringify(meals),
       }).catch(console.error);
     }, 800);
   }, [meals, hydrated, status]);
@@ -94,32 +96,55 @@ export default function HomePage() {
   useEffect(() => {
     if (!hydrated || status !== "authenticated") return;
     fetch("/api/user/goals", {
-      method:  "PUT",
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(goals),
+      body: JSON.stringify(goals),
     }).catch(console.error);
   }, [goals, hydrated, status]);
 
-  /* ── Computed daily totals ── */
-  const daily: MacroTotals = MEAL_NAMES.reduce((acc, meal) => {
-    const t = meals[meal].reduce((a, item) => addTotals(a, item.nutrition), emptyTotals());
+  /* ── Daily totals ── */
+  const daily: MacroTotals = meals.reduce((acc, meal) => {
+    const t = meal.items.reduce((a, item) => addTotals(a, item.nutrition), emptyTotals());
     return addTotals(acc, t);
   }, emptyTotals());
 
-  /* ── Handlers ── */
-  const handleAdd = useCallback((meal: MealName, food: Food, amount: number) => {
-    setMeals((prev) => ({
-      ...prev,
-      [meal]: [...prev[meal], makeMealItem(food, amount)],
-    }));
+  /* ── Meal item handlers ── */
+  const handleAdd = useCallback((mealId: string, food: Food, amount: number) => {
+    setMeals((prev) => prev.map((m) =>
+      m.id === mealId ? { ...m, items: [...m.items, makeMealItem(food, amount)] } : m
+    ));
   }, []);
 
-  const handleRemove = useCallback((meal: MealName, uid: string) => {
-    setMeals((prev) => ({
-      ...prev,
-      [meal]: prev[meal].filter((i) => i.uid !== uid),
-    }));
+  const handleRemove = useCallback((mealId: string, uid: string) => {
+    setMeals((prev) => prev.map((m) =>
+      m.id === mealId ? { ...m, items: m.items.filter((i) => i.uid !== uid) } : m
+    ));
   }, []);
+
+  const handleEditItem = useCallback((mealId: string, uid: string, food: Food, amount: number) => {
+    setMeals((prev) => prev.map((m) =>
+      m.id === mealId
+        ? { ...m, items: m.items.map((i) => i.uid === uid ? makeMealItem(food, amount) : i) }
+        : m
+    ));
+  }, []);
+
+  /* ── Meal management handlers ── */
+  const handleRenameMeal = useCallback((mealId: string, name: string) => {
+    setMeals((prev) => prev.map((m) => m.id === mealId ? { ...m, name } : m));
+  }, []);
+
+  const handleRemoveMeal = useCallback((mealId: string) => {
+    setMeals((prev) => prev.filter((m) => m.id !== mealId));
+  }, []);
+
+  const handleAddMeal = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setMeals((prev) => [...prev, { id: genId(), name: trimmed, items: [] }]);
+    setAddingMeal(false);
+    setCustomName("");
+  };
 
   const handleReset = () => {
     if (!confirm("Clear today's meal plan?")) return;
@@ -127,9 +152,9 @@ export default function HomePage() {
     setMeals(empty);
     clearHashPlan();
     fetch("/api/user/meals", {
-      method:  "PUT",
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify(empty),
+      body: JSON.stringify(empty),
     }).catch(console.error);
   };
 
@@ -146,7 +171,11 @@ export default function HomePage() {
     }
   };
 
-  /* ── Loading state while session initialises ── */
+  // Preset names not already in use
+  const existingNames = new Set(meals.map((m) => m.name));
+  const availablePresets = PRESET_MEAL_NAMES.filter((n) => !existingNames.has(n));
+
+  /* ── Loading ── */
   if (status === "loading" || !hydrated) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
@@ -183,25 +212,94 @@ export default function HomePage() {
           )}
         </div>
 
+        {/* Meals */}
         <section aria-label="Meals">
           <h2 className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-4">
             Meals
           </h2>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {MEAL_NAMES.map((meal) => (
+            {meals.map((meal) => (
               <MealCard
-                key={meal}
+                key={meal.id}
                 meal={meal}
-                items={meals[meal]}
                 foods={foods}
-                onAdd={(food, amount) => handleAdd(meal, food, amount)}
-                onRemove={(uid) => handleRemove(meal, uid)}
-                onAddNewFood={(prefill) => {
-                  setAddPrefill(prefill);
-                  setAddFoodOpen(true);
-                }}
+                onAdd={(food, amount) => handleAdd(meal.id, food, amount)}
+                onRemove={(uid) => handleRemove(meal.id, uid)}
+                onEditItem={(uid, food, amount) => handleEditItem(meal.id, uid, food, amount)}
+                onRename={(name) => handleRenameMeal(meal.id, name)}
+                onRemoveMeal={() => handleRemoveMeal(meal.id)}
+                onAddNewFood={(prefill) => { setAddPrefill(prefill); setAddFoodOpen(true); }}
               />
             ))}
+          </div>
+
+          {/* Add meal */}
+          <div className="mt-4">
+            {!addingMeal ? (
+              <button
+                onClick={() => setAddingMeal(true)}
+                className="w-full py-2.5 border border-dashed border-border-soft rounded-2xl
+                           text-xs text-text-muted hover:text-text hover:border-border
+                           transition-colors flex items-center justify-center gap-2"
+              >
+                <span className="text-base leading-none">＋</span> Add meal
+              </button>
+            ) : (
+              <div className="border border-border-soft rounded-2xl p-4 bg-surface
+                              shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col gap-3">
+                <p className="text-xs font-medium text-text-muted">Choose a meal</p>
+
+                {/* Preset chips */}
+                {availablePresets.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {availablePresets.map((name) => (
+                      <button
+                        key={name}
+                        onClick={() => handleAddMeal(name)}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-bg border border-border
+                                   hover:border-accent hover:text-accent transition-colors"
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Custom name */}
+                <div className="flex gap-2">
+                  <input
+                    ref={customInputRef}
+                    type="text"
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleAddMeal(customName);
+                      if (e.key === "Escape") { setAddingMeal(false); setCustomName(""); }
+                    }}
+                    placeholder="Custom name…"
+                    className="flex-1 text-sm border border-border rounded-[10px] px-3 py-2 bg-bg text-text
+                               placeholder-text-muted focus:outline-none focus:border-accent
+                               focus:ring-2 focus:ring-accent/20 transition-colors"
+                  />
+                  <button
+                    onClick={() => handleAddMeal(customName)}
+                    disabled={!customName.trim()}
+                    className="px-4 py-2 bg-accent text-white text-sm font-medium rounded-[10px]
+                               hover:bg-accent-hover disabled:opacity-30 transition-colors"
+                  >
+                    Add
+                  </button>
+                  <button
+                    onClick={() => { setAddingMeal(false); setCustomName(""); }}
+                    className="px-3 py-2 text-sm text-text-muted hover:text-text rounded-[10px]
+                               hover:bg-surface-2 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </section>
       </main>

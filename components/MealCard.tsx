@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import type { Food } from "@/lib/foods";
 import type { MacroTotals } from "@/lib/macros";
 import { addTotals, emptyTotals } from "@/lib/macros";
 import FoodSearch from "./FoodSearch";
 import { calculateNutrition } from "@/lib/foods";
+
+/* ── Types ───────────────────────────────────────────────── */
 
 export interface MealItem {
   uid:       string;
@@ -14,20 +16,51 @@ export interface MealItem {
   nutrition: MacroTotals;
 }
 
+export interface Meal {
+  id:    string;
+  name:  string;
+  items: MealItem[];
+}
+
 interface Props {
-  meal:     string;
-  items:    MealItem[];
-  foods:    Food[];
-  onAdd:    (food: Food, amount: number) => void;
-  onRemove: (uid: string) => void;
+  meal:         Meal;
+  foods:        Food[];
+  onAdd:        (food: Food, amount: number) => void;
+  onRemove:     (uid: string) => void;
+  onEditItem:   (uid: string, food: Food, amount: number) => void;
+  onRename:     (name: string) => void;
+  onRemoveMeal: () => void;
   onAddNewFood: (prefill: string) => void;
 }
 
-export default function MealCard({ meal, items, foods, onAdd, onRemove, onAddNewFood }: Props) {
+/* ── Component ───────────────────────────────────────────── */
+
+export default function MealCard({
+  meal, foods, onAdd, onRemove, onEditItem, onRename, onRemoveMeal, onAddNewFood,
+}: Props) {
+  const [editingName, setEditingName] = useState(false);
+  const [nameVal,     setNameVal]     = useState(meal.name);
+  const [editingUid,  setEditingUid]  = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  // Sync nameVal if meal.name changes externally
+  useEffect(() => { setNameVal(meal.name); }, [meal.name]);
+
+  useEffect(() => {
+    if (editingName) nameRef.current?.focus();
+  }, [editingName]);
+
   const totals = useMemo(
-    () => items.reduce((acc, item) => addTotals(acc, item.nutrition), emptyTotals()),
-    [items],
+    () => meal.items.reduce((acc, item) => addTotals(acc, item.nutrition), emptyTotals()),
+    [meal.items],
   );
+
+  const commitName = () => {
+    const trimmed = nameVal.trim();
+    if (trimmed) onRename(trimmed);
+    else setNameVal(meal.name);
+    setEditingName(false);
+  };
 
   return (
     <div className="bg-surface border border-border-soft rounded-2xl
@@ -36,17 +69,53 @@ export default function MealCard({ meal, items, foods, onAdd, onRemove, onAddNew
 
       {/* Card header */}
       <div className="px-5 pt-5 pb-4 border-b border-border-soft">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-text">{meal}</h2>
-          {items.length > 0 && (
-            <span className="tabular text-xs text-text-muted font-medium">
-              {totals.calories.toLocaleString()} kcal
-            </span>
+        <div className="flex items-center justify-between gap-2">
+          {editingName ? (
+            <input
+              ref={nameRef}
+              value={nameVal}
+              onChange={(e) => setNameVal(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); commitName(); }
+                if (e.key === "Escape") { setNameVal(meal.name); setEditingName(false); }
+              }}
+              className="text-sm font-semibold bg-transparent border-b border-accent outline-none
+                         text-text flex-1 min-w-0"
+            />
+          ) : (
+            <button
+              onClick={() => setEditingName(true)}
+              className="text-sm font-semibold text-text hover:text-accent transition-colors
+                         flex items-center gap-1.5 group"
+              title="Click to rename"
+            >
+              {meal.name}
+              <span className="text-text-muted opacity-0 group-hover:opacity-100 text-xs transition-opacity">✎</span>
+            </button>
           )}
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {meal.items.length > 0 && (
+              <span className="tabular text-xs text-text-muted font-medium">
+                {totals.calories.toLocaleString()} kcal
+              </span>
+            )}
+            <button
+              onClick={() => {
+                if (meal.items.length > 0 && !confirm(`Remove "${meal.name}" and all its items?`)) return;
+                onRemoveMeal();
+              }}
+              className="text-xs text-text-muted hover:text-danger transition-colors opacity-0
+                         group-hover:opacity-100 hover:opacity-100 px-1"
+              title="Remove meal"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
-        {/* Macro pills */}
-        {items.length > 0 && (
+        {meal.items.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-2">
             <MacroPill label="P" value={totals.protein} color="text-sky-600 dark:text-sky-400" />
             <MacroPill label="C" value={totals.carbs}   color="text-amber-600 dark:text-amber-400" />
@@ -57,19 +126,43 @@ export default function MealCard({ meal, items, foods, onAdd, onRemove, onAddNew
 
       {/* Food items */}
       <div className="px-5 py-3">
-        {items.length === 0 ? (
+        {meal.items.length === 0 ? (
           <p className="text-xs text-text-muted text-center py-4">
             No foods yet — add one below
           </p>
         ) : (
           <ul className="divide-y divide-border-soft">
-            {items.map((item) => (
-              <FoodRow
-                key={item.uid}
-                item={item}
-                onRemove={() => onRemove(item.uid)}
-              />
-            ))}
+            {meal.items.map((item) =>
+              editingUid === item.uid ? (
+                <li key={item.uid} className="py-3">
+                  <p className="text-xs text-text-muted mb-2">Editing — search a new food or adjust amount</p>
+                  <FoodSearch
+                    foods={foods}
+                    initialFood={item.food}
+                    initialAmount={item.amount}
+                    submitLabel="Save"
+                    onSelect={(food, amount) => {
+                      onEditItem(item.uid, food, amount);
+                      setEditingUid(null);
+                    }}
+                    onAddNew={(name) => { onAddNewFood(name); setEditingUid(null); }}
+                  />
+                  <button
+                    onClick={() => setEditingUid(null)}
+                    className="mt-2 text-xs text-text-muted hover:text-text transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </li>
+              ) : (
+                <FoodRow
+                  key={item.uid}
+                  item={item}
+                  onEdit={() => setEditingUid(item.uid)}
+                  onRemove={() => { onRemove(item.uid); setEditingUid(null); }}
+                />
+              )
+            )}
           </ul>
         )}
       </div>
@@ -86,7 +179,8 @@ export default function MealCard({ meal, items, foods, onAdd, onRemove, onAddNew
   );
 }
 
-/* ── Helpers ───────────────────────────────────────────── */
+/* ── Helpers ─────────────────────────────────────────────── */
+
 function MacroPill({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <span className={`text-xs tabular font-medium ${color}`}>
@@ -95,7 +189,13 @@ function MacroPill({ label, value, color }: { label: string; value: number; colo
   );
 }
 
-function FoodRow({ item, onRemove }: { item: MealItem; onRemove: () => void }) {
+function FoodRow({
+  item, onEdit, onRemove,
+}: {
+  item:     MealItem;
+  onEdit:   () => void;
+  onRemove: () => void;
+}) {
   return (
     <li className="flex items-center justify-between py-2.5 gap-3 group">
       <div className="flex-1 min-w-0">
@@ -108,15 +208,24 @@ function FoodRow({ item, onRemove }: { item: MealItem; onRemove: () => void }) {
           {item.nutrition.protein}g P · {item.nutrition.carbs}g C · {item.nutrition.fat}g F
         </p>
       </div>
-      <button
-        onClick={onRemove}
-        aria-label={`Remove ${item.food.name}`}
-        className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-lg
-                   text-text-muted opacity-0 group-hover:opacity-100 focus:opacity-100
-                   hover:text-danger hover:bg-danger/10 transition-all duration-150 focus-accent text-xs"
-      >
-        ✕
-      </button>
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        <button
+          onClick={onEdit}
+          aria-label={`Edit ${item.food.name}`}
+          className="w-6 h-6 flex items-center justify-center rounded-lg text-text-muted
+                     hover:text-accent hover:bg-accent-surface transition-all text-xs focus-accent"
+        >
+          ✎
+        </button>
+        <button
+          onClick={onRemove}
+          aria-label={`Remove ${item.food.name}`}
+          className="w-6 h-6 flex items-center justify-center rounded-lg text-text-muted
+                     hover:text-danger hover:bg-danger/10 transition-all text-xs focus-accent"
+        >
+          ✕
+        </button>
+      </div>
     </li>
   );
 }
