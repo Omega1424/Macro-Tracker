@@ -10,11 +10,12 @@ interface Props {
 }
 
 export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
-  const [query,    setQuery]    = useState("");
-  const [amount,   setAmount]   = useState<number | "">(100);
-  const [active,   setActive]   = useState(false);
-  const [cursor,   setCursor]   = useState(-1);
-  const [selected, setSelected] = useState<Food | null>(null);
+  const [query,     setQuery]     = useState("");
+  const [amount,    setAmount]    = useState<number | "">(100);
+  const [active,    setActive]    = useState(false);
+  const [cursor,    setCursor]    = useState(-1);
+  const [selected,  setSelected]  = useState<Food | null>(null);
+  const [useServings, setUseServings] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef  = useRef<HTMLUListElement>(null);
 
@@ -26,9 +27,10 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
 
   const showDropdown = active && query.trim().length > 0;
 
-  // When food is selected, default amount to serving size
+  // When food is selected, default amount based on current mode
   useEffect(() => {
-    if (selected) setAmount(selected.serving);
+    if (selected) setAmount(useServings ? 1 : selected.serving);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
   const pick = (food: Food) => {
@@ -36,15 +38,21 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
     setQuery(food.name);
     setActive(false);
     setCursor(-1);
+    setAmount(useServings ? 1 : food.serving);
     setTimeout(() => document.getElementById("food-amount")?.focus(), 0);
   };
 
+  // Actual grams/ml to pass to onSelect
+  const resolvedAmount = selected && useServings
+    ? Number(amount) * selected.serving
+    : Number(amount);
+
   const handleAdd = () => {
     if (!selected || !amount) return;
-    onSelect(selected, Number(amount));
+    onSelect(selected, resolvedAmount);
     setSelected(null);
     setQuery("");
-    setAmount(100);
+    setAmount(useServings ? 1 : 100);
     inputRef.current?.focus();
   };
 
@@ -162,32 +170,64 @@ export default function FoodSearch({ foods, onSelect, onAddNew }: Props) {
 
       {/* Amount row — only shown once a food is selected */}
       {selected && (
-        <div className="flex gap-2 animate-slide-up">
-          <div className="relative flex-1">
-            <input
-              id="food-amount"
-              type="number"
-              min={1}
-              value={amount}
-              onChange={(e) => setAmount(e.target.value === "" ? "" : Number(e.target.value))}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAdd(); } }}
-              placeholder={String(selected.serving)}
-              aria-label={`Amount in ${selected.unit}`}
-              className="w-full text-sm border border-border rounded-[10px] px-3 py-2 pr-9 bg-bg text-text tabular
-                         focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-colors"
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">
+        <div className="flex flex-col gap-1.5 animate-slide-up">
+          {/* Mode toggle */}
+          <div className="flex gap-1 bg-bg rounded-lg p-0.5 self-start border border-border-soft">
+            <button
+              onClick={() => { setUseServings(false); setAmount(selected.serving); }}
+              className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                !useServings ? "bg-surface text-text shadow-sm" : "text-text-muted hover:text-text"
+              }`}
+            >
               {selected.unit}
-            </span>
+            </button>
+            <button
+              onClick={() => { setUseServings(true); setAmount(1); }}
+              className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                useServings ? "bg-surface text-text shadow-sm" : "text-text-muted hover:text-text"
+              }`}
+            >
+              servings
+            </button>
           </div>
-          <button
-            onClick={handleAdd}
-            disabled={!amount || Number(amount) <= 0}
-            className="px-4 py-2 bg-accent text-white text-sm font-medium rounded-[10px]
-                       hover:bg-accent-hover disabled:opacity-30 transition-colors focus-accent"
-          >
-            Add
-          </button>
+
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                id="food-amount"
+                type="number"
+                min={useServings ? 0.25 : 1}
+                step={useServings ? 0.25 : 1}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAdd(); } }}
+                placeholder={useServings ? "1" : String(selected.serving)}
+                aria-label={useServings ? "Number of servings" : `Amount in ${selected.unit}`}
+                className="w-full text-sm border border-border rounded-[10px] px-3 py-2 pr-16 bg-bg text-text tabular
+                           focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-colors"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">
+                {useServings
+                  ? `× ${selected.serving}${selected.unit}`
+                  : selected.unit}
+              </span>
+            </div>
+            <button
+              onClick={handleAdd}
+              disabled={!amount || Number(amount) <= 0}
+              className="px-4 py-2 bg-accent text-white text-sm font-medium rounded-[10px]
+                         hover:bg-accent-hover disabled:opacity-30 transition-colors focus-accent"
+            >
+              Add
+            </button>
+          </div>
+
+          {/* Preview of resolved amount when in servings mode */}
+          {useServings && amount && Number(amount) > 0 && (
+            <p className="text-xs text-text-muted">
+              = {resolvedAmount}{selected.unit}
+            </p>
+          )}
         </div>
       )}
     </div>
