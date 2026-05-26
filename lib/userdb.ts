@@ -1,11 +1,22 @@
 /**
- * Per-user data stored in Vercel KV.
+ * Per-user data stored in Upstash Redis (via @upstash/redis directly).
  *
  * Keys:
- *   user:by-email:{email}       → UserRecord
- *   user:{id}:goals             → Goals
- *   user:{id}:meals:{YYYY-MM-DD}→ MealPlan  (30-day TTL)
+ *   user:by-email:{email}        → UserRecord
+ *   user:{id}:goals              → Goals
+ *   user:{id}:meals:{YYYY-MM-DD} → MealPlan  (30-day TTL)
  */
+
+import { Redis } from "@upstash/redis";
+
+function getRedis() {
+  const url   = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) {
+    throw new Error(`Missing Redis env vars. KV_REST_API_URL=${url ? "set" : "MISSING"} KV_REST_API_TOKEN=${token ? "set" : "MISSING"}`);
+  }
+  return new Redis({ url, token });
+}
 
 export interface UserRecord {
   id:           string;
@@ -13,21 +24,18 @@ export interface UserRecord {
   passwordHash: string;
 }
 
-async function db() {
-  const { kv } = await import("@vercel/kv");
-  return kv;
-}
-
 /* ── Users ─────────────────────────────────────────────── */
 
 export async function getUser(email: string): Promise<UserRecord | null> {
   try {
-    const kv  = await db();
-    const raw = await kv.get(`user:by-email:${email}`);
-    if (!raw) { console.error("[userdb] getUser: no record for", email); return null; }
-    // Handle both object (already parsed) and string (needs parsing) responses
+    const redis = getRedis();
+    const raw   = await redis.get(`user:by-email:${email}`);
+    if (!raw) {
+      console.error("[userdb] getUser: no record for", email);
+      return null;
+    }
     const user = typeof raw === "string" ? JSON.parse(raw) as UserRecord : raw as UserRecord;
-    console.log("[userdb] getUser: found user", user.email);
+    console.log("[userdb] getUser: found", user.email);
     return user;
   } catch (err) {
     console.error("[userdb] getUser error:", err);
@@ -35,14 +43,12 @@ export async function getUser(email: string): Promise<UserRecord | null> {
   }
 }
 
-export async function createUser(
-  email: string,
-  passwordHash: string,
-): Promise<UserRecord> {
-  const kv   = await db();
-  const id   = crypto.randomUUID();
+export async function createUser(email: string, passwordHash: string): Promise<UserRecord> {
+  const redis = getRedis();
+  const id    = crypto.randomUUID();
   const user: UserRecord = { id, email, passwordHash };
-  await kv.set(`user:by-email:${email}`, user);
+  await redis.set(`user:by-email:${email}`, JSON.stringify(user));
+  console.log("[userdb] createUser:", email);
   return user;
 }
 
@@ -50,35 +56,37 @@ export async function createUser(
 
 export async function getUserGoals(userId: string): Promise<unknown> {
   try {
-    const kv = await db();
-    return await kv.get(`user:${userId}:goals`);
-  } catch {
+    const redis = getRedis();
+    const raw   = await redis.get(`user:${userId}:goals`);
+    if (!raw) return null;
+    return typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch (err) {
+    console.error("[userdb] getUserGoals error:", err);
     return null;
   }
 }
 
 export async function saveUserGoals(userId: string, goals: unknown): Promise<void> {
-  const kv = await db();
-  await kv.set(`user:${userId}:goals`, goals);
+  const redis = getRedis();
+  await redis.set(`user:${userId}:goals`, JSON.stringify(goals));
 }
 
 /* ── Meals ──────────────────────────────────────────────── */
 
 export async function getUserMeals(userId: string, date: string): Promise<unknown> {
   try {
-    const kv = await db();
-    return await kv.get(`user:${userId}:meals:${date}`);
-  } catch {
+    const redis = getRedis();
+    const raw   = await redis.get(`user:${userId}:meals:${date}`);
+    if (!raw) return null;
+    return typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch (err) {
+    console.error("[userdb] getUserMeals error:", err);
     return null;
   }
 }
 
-export async function saveUserMeals(
-  userId: string,
-  date:   string,
-  meals:  unknown,
-): Promise<void> {
-  const kv = await db();
-  // 30-day TTL so old entries auto-expire
-  await kv.set(`user:${userId}:meals:${date}`, meals, { ex: 60 * 60 * 24 * 30 });
+export async function saveUserMeals(userId: string, date: string, meals: unknown): Promise<void> {
+  const redis = getRedis();
+  // 30-day TTL
+  await redis.set(`user:${userId}:meals:${date}`, JSON.stringify(meals), { ex: 60 * 60 * 24 * 30 });
 }

@@ -1,33 +1,33 @@
-/**
- * Database abstraction.
- * - If KV_REST_API_URL + KV_REST_API_TOKEN are set (Vercel KV), foods are persisted in Redis.
- * - Otherwise falls back to an in-memory store (resets on server restart – fine for local dev).
- */
 import type { Food } from "./foods";
+import { Redis } from "@upstash/redis";
 
-// In-memory fallback
 const _mem: Food[] = [];
 
-function useKV() {
-  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+function getRedis() {
+  const url   = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
+  return new Redis({ url, token });
 }
 
 export async function getCustomFoods(): Promise<Food[]> {
-  if (!useKV()) return _mem;
+  const redis = getRedis();
+  if (!redis) return _mem;
   try {
-    const { kv } = await import("@vercel/kv");
-    return (await kv.get<Food[]>("custom_foods")) ?? [];
+    const raw = await redis.get("custom_foods");
+    if (!raw) return [];
+    return typeof raw === "string" ? JSON.parse(raw) : raw as Food[];
   } catch {
     return _mem;
   }
 }
 
 export async function saveCustomFoods(foods: Food[]): Promise<void> {
-  if (!useKV()) {
+  const redis = getRedis();
+  if (!redis) {
     _mem.length = 0;
     _mem.push(...foods);
     return;
   }
-  const { kv } = await import("@vercel/kv");
-  await kv.set("custom_foods", foods);
+  await redis.set("custom_foods", JSON.stringify(foods));
 }
