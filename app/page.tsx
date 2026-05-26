@@ -12,6 +12,7 @@ import { useTheme } from "@/lib/theme";
 
 import Header       from "@/components/Header";
 import DailySummary from "@/components/DailySummary";
+import DayBar       from "@/components/DayBar";
 import MealCard, { type Meal, type MealItem, makeMealItem } from "@/components/MealCard";
 import GoalsDrawer   from "@/components/GoalsDrawer";
 import AddFoodModal  from "@/components/AddFoodModal";
@@ -218,6 +219,8 @@ export default function HomePage() {
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
         <DailySummary totals={daily} goals={goals} />
+
+        <DayBar goalCalories={goals.calories} />
 
         <div className="flex items-center gap-3 -mt-2">
           <button
