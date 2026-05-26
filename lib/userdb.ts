@@ -22,9 +22,15 @@ async function db() {
 
 export async function getUser(email: string): Promise<UserRecord | null> {
   try {
-    const kv = await db();
-    return await kv.get<UserRecord>(`user:by-email:${email}`);
-  } catch {
+    const kv  = await db();
+    const raw = await kv.get(`user:by-email:${email}`);
+    if (!raw) { console.error("[userdb] getUser: no record for", email); return null; }
+    // Handle both object (already parsed) and string (needs parsing) responses
+    const user = typeof raw === "string" ? JSON.parse(raw) as UserRecord : raw as UserRecord;
+    console.log("[userdb] getUser: found user", user.email);
+    return user;
+  } catch (err) {
+    console.error("[userdb] getUser error:", err);
     return null;
   }
 }

@@ -15,11 +15,21 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
-        const user = await getUser(credentials.email.toLowerCase().trim());
-        if (!user) return null;
+        if (!credentials?.email || !credentials?.password) {
+          console.error("[auth] missing credentials");
+          return null;
+        }
+        const email = credentials.email.toLowerCase().trim();
+        const user  = await getUser(email);
+        if (!user) {
+          console.error("[auth] no user found for:", email);
+          return null;
+        }
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
-        if (!valid) return null;
+        if (!valid) {
+          console.error("[auth] wrong password for:", email);
+          return null;
+        }
         return { id: user.id, email: user.email, name: user.email };
       },
     }),
