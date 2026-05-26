@@ -10,35 +10,31 @@ import { DEFAULT_GOALS } from "@/lib/storage";
 import { getHashPlan, setHashPlan, clearHashPlan } from "@/lib/share";
 import { useTheme } from "@/lib/theme";
 
-import Header       from "@/components/Header";
-import DailySummary from "@/components/DailySummary";
-import DayBar       from "@/components/DayBar";
+import Header        from "@/components/Header";
+import DailySummary  from "@/components/DailySummary";
+import DayBar        from "@/components/DayBar";
 import MealCard, { type Meal, type MealItem, makeMealItem } from "@/components/MealCard";
 import GoalsDrawer   from "@/components/GoalsDrawer";
 import AddFoodModal  from "@/components/AddFoodModal";
 
 /* ─────────────────────────────────────────────────────────── */
 
-const PRESET_MEAL_NAMES = ["Breakfast", "Lunch", "Dinner", "Supper", "Snack", "Pre-workout", "Post-workout"];
+const PRESET_MEAL_NAMES = ["Breakfast","Lunch","Dinner","Supper","Snack","Pre-workout","Post-workout"];
 
-function genId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
+function genId()   { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
+function todayStr(){ return new Date().toISOString().split("T")[0]; }
 
 function emptyPlan(): Meal[] {
   return [{ id: genId(), name: "Breakfast", items: [] }];
 }
 
-/** Convert old Record<string, MealItem[]> format OR validate new Meal[] format */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function migrateMeals(data: any): Meal[] {
   if (!data) return emptyPlan();
-  // New format: array with id/name/items
   if (Array.isArray(data)) {
     if (data.length === 0) return emptyPlan();
     if (data[0]?.id && data[0]?.name && Array.isArray(data[0]?.items)) return data as Meal[];
   }
-  // Old format: plain object { Breakfast: [], Lunch: [], ... }
   if (typeof data === "object") {
     const meals: Meal[] = Object.entries(data)
       .filter(([, items]) => Array.isArray(items))
@@ -46,6 +42,11 @@ function migrateMeals(data: any): Meal[] {
     return meals.length > 0 ? meals : emptyPlan();
   }
   return emptyPlan();
+}
+
+function formatDateLabel(date: string) {
+  const d = new Date(date + "T00:00:00");
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
 /* ─────────────────────────────────────────────────────────── */
@@ -58,16 +59,17 @@ export default function HomePage() {
   const [meals,        setMeals]        = useState<Meal[]>(emptyPlan());
   const [goals,        setGoals]        = useState<Goals>(DEFAULT_GOALS);
   const [hydrated,     setHydrated]     = useState(false);
+  const [viewDate,     setViewDate]     = useState(todayStr());
+  const [dayBarKey,    setDayBarKey]    = useState(0);   // bumped after each save to refresh bar
   const [goalsOpen,    setGoalsOpen]    = useState(false);
   const [addFoodOpen,  setAddFoodOpen]  = useState(false);
   const [addPrefill,   setAddPrefill]   = useState("");
   const [shareMsg,     setShareMsg]     = useState("");
-  // Add-meal panel
   const [addingMeal,   setAddingMeal]   = useState(false);
   const [customName,   setCustomName]   = useState("");
-  const customInputRef = useRef<HTMLInputElement>(null);
 
   const saveMealsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isToday = viewDate === todayStr();
 
   /* ── Load foods ── */
   useEffect(() => {
@@ -77,39 +79,47 @@ export default function HomePage() {
       .catch(console.error);
   }, []);
 
-  /* ── Load user meals + goals ── */
+  /* ── Load meals when viewDate or auth changes ── */
   useEffect(() => {
     if (status !== "authenticated") return;
+    setHydrated(false);
 
-    const fromHash = getHashPlan<Meal[]>();
-    if (fromHash) {
-      setMeals(migrateMeals(fromHash));
-      setHydrated(true);
-      return;
+    // Only use hash for today
+    if (isToday) {
+      const fromHash = getHashPlan<Meal[]>();
+      if (fromHash) {
+        setMeals(migrateMeals(fromHash));
+        setHydrated(true);
+        return;
+      }
     }
 
     Promise.all([
-      fetch("/api/user/meals").then((r) => r.ok ? r.json() : null),
+      fetch(`/api/user/meals?date=${viewDate}`).then((r) => r.ok ? r.json() : null),
       fetch("/api/user/goals").then((r) => r.ok ? r.json() : null),
     ]).then(([savedMeals, savedGoals]) => {
-      if (savedMeals) setMeals(migrateMeals(savedMeals));
+      setMeals(savedMeals ? migrateMeals(savedMeals) : emptyPlan());
       if (savedGoals) setGoals({ ...DEFAULT_GOALS, ...savedGoals });
       setHydrated(true);
     }).catch(() => setHydrated(true));
-  }, [status]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, viewDate]);
 
   /* ── Persist meals (debounced) ── */
   useEffect(() => {
     if (!hydrated || status !== "authenticated") return;
-    setHashPlan(meals);
+    if (isToday) setHashPlan(meals);
     if (saveMealsTimer.current) clearTimeout(saveMealsTimer.current);
     saveMealsTimer.current = setTimeout(() => {
-      fetch("/api/user/meals", {
+      fetch(`/api/user/meals?date=${viewDate}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(meals),
-      }).catch(console.error);
+      })
+        .then(() => setDayBarKey((k) => k + 1))
+        .catch(console.error);
     }, 800);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meals, hydrated, status]);
 
   /* ── Persist goals ── */
@@ -128,7 +138,7 @@ export default function HomePage() {
     return addTotals(acc, t);
   }, emptyTotals());
 
-  /* ── Meal item handlers ── */
+  /* ── Handlers ── */
   const handleAdd = useCallback((mealId: string, food: Food, amount: number) => {
     setMeals((prev) => prev.map((m) =>
       m.id === mealId ? { ...m, items: [...m.items, makeMealItem(food, amount)] } : m
@@ -149,7 +159,6 @@ export default function HomePage() {
     ));
   }, []);
 
-  /* ── Meal management handlers ── */
   const handleRenameMeal = useCallback((mealId: string, name: string) => {
     setMeals((prev) => prev.map((m) => m.id === mealId ? { ...m, name } : m));
   }, []);
@@ -167,15 +176,20 @@ export default function HomePage() {
   };
 
   const handleReset = () => {
-    if (!confirm("Clear today's meal plan?")) return;
+    if (!confirm(`Clear meal plan for ${isToday ? "today" : formatDateLabel(viewDate)}?`)) return;
     const empty = emptyPlan();
     setMeals(empty);
-    clearHashPlan();
-    fetch("/api/user/meals", {
+    if (isToday) clearHashPlan();
+    fetch(`/api/user/meals?date=${viewDate}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(empty),
-    }).catch(console.error);
+    }).then(() => setDayBarKey((k) => k + 1)).catch(console.error);
+  };
+
+  const handleSelectDate = (date: string) => {
+    setViewDate(date);
+    setAddingMeal(false);
   };
 
   const handleFoodAdded = (food: Food) => setFoods((prev) => [...prev, food]);
@@ -191,8 +205,7 @@ export default function HomePage() {
     }
   };
 
-  // Preset names not already in use
-  const existingNames = new Set(meals.map((m) => m.name));
+  const existingNames   = new Set(meals.map((m) => m.name));
   const availablePresets = PRESET_MEAL_NAMES.filter((n) => !existingNames.has(n));
 
   /* ── Loading ── */
@@ -220,7 +233,28 @@ export default function HomePage() {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
         <DailySummary totals={daily} goals={goals} />
 
-        <DayBar goalCalories={goals.calories} />
+        <DayBar
+          goalCalories={goals.calories}
+          selectedDate={viewDate}
+          onSelectDate={handleSelectDate}
+          refreshKey={dayBarKey}
+        />
+
+        {/* Viewing past day banner */}
+        {!isToday && (
+          <div className="flex items-center justify-between bg-surface border border-border-soft
+                          rounded-xl px-4 py-2.5">
+            <span className="text-sm text-text-muted">
+              Viewing <span className="text-text font-medium">{formatDateLabel(viewDate)}</span>
+            </span>
+            <button
+              onClick={() => setViewDate(todayStr())}
+              className="text-xs text-accent hover:text-accent-hover font-medium transition-colors"
+            >
+              ← Back to today
+            </button>
+          </div>
+        )}
 
         <div className="flex items-center gap-3 -mt-2">
           <button
@@ -234,7 +268,6 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Meals */}
         <section aria-label="Meals">
           <h2 className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-4">
             Meals
@@ -271,8 +304,6 @@ export default function HomePage() {
               <div className="border border-border-soft rounded-2xl p-4 bg-surface
                               shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col gap-3">
                 <p className="text-xs font-medium text-text-muted">Choose a meal</p>
-
-                {/* Preset chips */}
                 {availablePresets.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {availablePresets.map((name) => (
@@ -287,11 +318,8 @@ export default function HomePage() {
                     ))}
                   </div>
                 )}
-
-                {/* Custom name */}
                 <div className="flex gap-2">
                   <input
-                    ref={customInputRef}
                     type="text"
                     value={customName}
                     onChange={(e) => setCustomName(e.target.value)}

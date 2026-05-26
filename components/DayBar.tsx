@@ -4,20 +4,19 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import type { DaySummary } from "@/app/api/user/meals/month/route";
 
 /* ── Ring geometry ───────────────────────────────────────── */
-const SIZE   = 44;
-const CX     = SIZE / 2;
-const R1     = 16;   // outer ring radius
-const R2     = 9.5;  // inner (overflow) ring radius
-const SW     = 2.8;  // stroke width
-const C1     = 2 * Math.PI * R1;
-const C2     = 2 * Math.PI * R2;
+const SIZE = 44;
+const CX   = SIZE / 2;
+const R1   = 16;        // outer ring radius
+const R2   = 9.5;       // inner (overflow) ring radius
+const SW   = 2.8;
+const C1   = 2 * Math.PI * R1;
+const C2   = 2 * Math.PI * R2;
 
 /* ── Color helpers ───────────────────────────────────────── */
 type RGB = [number, number, number];
-
 const DARK_BLUE: RGB = [30,  80, 160];
 const GREEN:     RGB = [34, 197,  94];
-const YELLOW:    RGB = [250, 204, 21];
+const YELLOW:    RGB = [250, 204,  21];
 const ORANGE:    RGB = [249, 115,  22];
 const RED:       RGB = [239,  68,  68];
 
@@ -28,10 +27,10 @@ function lerp(a: RGB, b: RGB, t: number): string {
 
 function ringColor(pct: number): string {
   if (pct <= 1.05) {
-    // 5% → dark blue … 100% → green
+    // 5% → dark blue  …  100% → green
     return lerp(DARK_BLUE, GREEN, (pct - 0.05) / 0.95);
   }
-  // Over: 105% yellow … 150% orange … 200%+ red
+  // Over goal: yellow → orange → red
   const t = (pct - 1.05) / 0.75;
   return t < 0.5
     ? lerp(YELLOW, ORANGE, t * 2)
@@ -40,68 +39,64 @@ function ringColor(pct: number): string {
 
 /* ── Single day circle ───────────────────────────────────── */
 function DayCircle({
-  day, calories, goalCalories, isToday, isFuture,
+  day, date, calories, goalCalories, isToday, isSelected, isFuture, onClick,
 }: {
   day:          number;
+  date:         string;
   calories:     number | null;
   goalCalories: number;
   isToday:      boolean;
+  isSelected:   boolean;
   isFuture:     boolean;
+  onClick:      () => void;
 }) {
-  const pct    = calories != null && goalCalories > 0 ? calories / goalCalories : null;
+  const pct     = calories != null && goalCalories > 0 ? calories / goalCalories : null;
   const hasData = pct !== null && pct >= 0.05;
 
-  // Base ring fill (0 → 100%)
-  const baseFill   = hasData ? Math.min(pct!, 1) : 0;
-  const baseDash   = `${baseFill * C1} ${C1}`;
+  // Outer ring: capped at 100%
+  const baseFill = hasData ? Math.min(pct!, 1) : 0;
+  const baseDash = `${baseFill * C1} ${C1}`;
 
-  // Overflow ring (when > 100%)
+  // Inner overflow ring: only when > 105%, same color
   const overflow     = hasData && pct! > 1.05 ? Math.min(pct! - 1, 1) : 0;
   const overflowDash = `${overflow * C2} ${C2}`;
 
+  // Both rings use same color
   const color = hasData ? ringColor(pct!) : "transparent";
 
   return (
-    <div className="flex flex-col items-center gap-0.5 flex-shrink-0">
-      <div
-        className={`relative rounded-full transition-all ${
-          isToday ? "ring-2 ring-accent ring-offset-1 ring-offset-bg" : ""
-        } ${isFuture ? "opacity-30" : ""}`}
-        style={{ width: SIZE, height: SIZE }}
-      >
+    <button
+      onClick={onClick}
+      className={`flex flex-col items-center gap-0 flex-shrink-0 rounded-lg transition-colors
+        ${isFuture ? "opacity-30 cursor-default" : "hover:bg-surface-2 cursor-pointer"}
+        ${isSelected && !isToday ? "bg-surface-2" : ""}
+      `}
+      style={{ width: SIZE + 8, paddingTop: 4, paddingBottom: 4 }}
+      disabled={isFuture}
+    >
+      <div className="relative" style={{ width: SIZE, height: SIZE }}>
         <svg width={SIZE} height={SIZE} className="absolute inset-0">
           {/* Track */}
           <circle
             cx={CX} cy={CX} r={R1}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={SW}
-            className="text-border-soft"
-            opacity={0.3}
+            fill="none" stroke="currentColor" strokeWidth={SW}
+            className="text-border-soft" opacity={0.2}
           />
-
-          {/* Base progress ring */}
+          {/* Base progress ring (0–100%) */}
           {hasData && (
             <circle
               cx={CX} cy={CX} r={R1}
-              fill="none"
-              stroke={color}
-              strokeWidth={SW}
-              strokeDasharray={baseDash}
-              strokeLinecap="round"
+              fill="none" stroke={color} strokeWidth={SW}
+              strokeDasharray={baseDash} strokeLinecap="round"
               transform={`rotate(-90 ${CX} ${CX})`}
             />
           )}
-
-          {/* Overflow ring (inner, shown when over goal) */}
+          {/* Overflow ring — inner, same color as outer */}
           {overflow > 0 && (
             <circle
               cx={CX} cy={CX} r={R2}
-              fill="none"
-              stroke={color}
-              strokeWidth={SW}
-              strokeDasharray={overflowDash}
-              strokeLinecap="round"
+              fill="none" stroke={color} strokeWidth={SW}
+              strokeDasharray={overflowDash} strokeLinecap="round"
               transform={`rotate(-90 ${CX} ${CX})`}
               opacity={0.85}
             />
@@ -111,31 +106,31 @@ function DayCircle({
         {/* Day number */}
         <span
           className={`absolute inset-0 flex items-center justify-center text-[11px] font-medium
-            ${isToday ? "text-accent" : calories !== null ? "text-text" : "text-text-muted"}`}
+            ${isToday ? "text-accent font-bold" : isSelected ? "text-text" : "text-text-muted"}`}
         >
           {day}
         </span>
       </div>
 
-      {/* Calorie label under circle — only if has data */}
-      {calories !== null && !isFuture && (
-        <span className="text-[9px] text-text-muted tabular leading-none">
-          {calories >= 1000 ? `${(calories / 1000).toFixed(1)}k` : calories}
-        </span>
+      {/* Today dot indicator */}
+      {isToday && (
+        <span className="w-1 h-1 rounded-full bg-accent mt-0.5" />
       )}
-    </div>
+    </button>
   );
 }
 
-/* ── Month label ─────────────────────────────────────────── */
+/* ── DayBar ──────────────────────────────────────────────── */
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-/* ── DayBar ──────────────────────────────────────────────── */
 interface Props {
-  goalCalories: number;
+  goalCalories:   number;
+  selectedDate:   string;
+  onSelectDate:   (date: string) => void;
+  refreshKey?:    number;
 }
 
-export default function DayBar({ goalCalories }: Props) {
+export default function DayBar({ goalCalories, selectedDate, onSelectDate, refreshKey }: Props) {
   const [summaries, setSummaries] = useState<DaySummary[]>([]);
   const todayRef  = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -152,15 +147,14 @@ export default function DayBar({ goalCalories }: Props) {
       .catch(console.error);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
 
-  // Auto-scroll today into center
+  // Scroll selected date into center
   useEffect(() => {
     if (todayRef.current && scrollRef.current) {
-      const el       = todayRef.current;
-      const parent   = scrollRef.current;
-      const elCenter = el.offsetLeft + el.offsetWidth / 2;
-      parent.scrollLeft = elCenter - parent.clientWidth / 2;
+      const el     = todayRef.current;
+      const parent = scrollRef.current;
+      parent.scrollLeft = el.offsetLeft + el.offsetWidth / 2 - parent.clientWidth / 2;
     }
   }, [summaries]);
 
@@ -169,54 +163,34 @@ export default function DayBar({ goalCalories }: Props) {
   return (
     <div className="bg-surface border border-border-soft rounded-2xl px-4 py-3
                     shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      {/* Header */}
-      <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
+      <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
         {MONTHS[month]} {year}
       </p>
 
-      {/* Scrollable strip */}
-      <div
-        ref={scrollRef}
-        className="overflow-x-auto"
-        style={{ scrollbarWidth: "none" }}
-      >
-        <div className="flex gap-2 pb-1" style={{ minWidth: "max-content" }}>
+      <div ref={scrollRef} className="overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+        <div className="flex gap-0.5 pb-1" style={{ minWidth: "max-content" }}>
           {summaries.map((s) => {
-            const dayNum  = parseInt(s.date.split("-")[2]);
-            const isToday = s.date === today;
+            const dayNum   = parseInt(s.date.split("-")[2]);
+            const isToday  = s.date === today;
             const isFuture = s.date > today;
 
             return (
               <div key={s.date} ref={isToday ? todayRef : undefined}>
                 <DayCircle
                   day={dayNum}
+                  date={s.date}
                   calories={calMap[s.date] ?? null}
                   goalCalories={goalCalories}
                   isToday={isToday}
+                  isSelected={s.date === selectedDate}
                   isFuture={isFuture}
+                  onClick={() => !isFuture && onSelectDate(s.date)}
                 />
               </div>
             );
           })}
         </div>
       </div>
-
-      {/* Legend */}
-      <div className="flex items-center gap-4 mt-2 pt-2 border-t border-border-soft">
-        <LegendItem color="rgb(30,80,160)" label="Far under" />
-        <LegendItem color="rgb(34,197,94)" label="On target" />
-        <LegendItem color="rgb(250,204,21)" label="Over" />
-        <LegendItem color="rgb(239,68,68)" label="Way over" />
-      </div>
-    </div>
-  );
-}
-
-function LegendItem({ color, label }: { color: string; label: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
-      <span className="text-[10px] text-text-muted">{label}</span>
     </div>
   );
 }
