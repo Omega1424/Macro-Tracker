@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, useLayoutEffect } from "react";
 import type { DaySummary } from "@/app/api/user/meals/month/route";
 
 /* ── Ring geometry ───────────────────────────────────────── */
@@ -134,6 +134,8 @@ export default function DayBar({ goalCalories, selectedDate, onSelectDate, refre
   const [summaries,    setSummaries]    = useState<DaySummary[]>([]);
   const [displayYear,  setDisplayYear]  = useState(() => new Date().getUTCFullYear());
   const [displayMonth, setDisplayMonth] = useState(() => new Date().getUTCMonth() + 1);
+  const [canScrollLeft,  setCanScrollLeft]  = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
   const todayRef  = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -142,6 +144,13 @@ export default function DayBar({ goalCalories, selectedDate, onSelectDate, refre
   const nowYear  = new Date().getUTCFullYear();
   const nowMonth = new Date().getUTCMonth() + 1;
   const isCurrentMonth = displayYear === nowYear && displayMonth === nowMonth;
+
+  const updateScrollButtons = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
 
   const load = useCallback(() => {
     fetch(`/api/user/meals/month?year=${displayYear}&month=${displayMonth}`)
@@ -154,16 +163,26 @@ export default function DayBar({ goalCalories, selectedDate, onSelectDate, refre
 
   // When month changes, scroll selected date (or today) into view
   useEffect(() => {
-    if (!scrollRef.current) return;
+    if (!scrollRef.current || summaries.length === 0) return;
     // Try to scroll the selected date into center first, else today
     const targetDate = summaries.find(s => s.date === selectedDate) ? selectedDate : today;
     const idx = summaries.findIndex(s => s.date === targetDate);
+    const itemWidth = 52; // approx width per item
+    const parent = scrollRef.current;
     if (idx >= 0) {
-      const itemWidth = 52; // approx width per item
-      const parent    = scrollRef.current;
       parent.scrollLeft = idx * itemWidth - parent.clientWidth / 2 + itemWidth / 2;
+    } else {
+      parent.scrollLeft = 0;
     }
-  }, [summaries, selectedDate, today]);
+    setTimeout(updateScrollButtons, 50);
+  }, [summaries, selectedDate, today, updateScrollButtons]);
+
+  const scrollBy = (delta: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: delta, behavior: "smooth" });
+    setTimeout(updateScrollButtons, 300);
+  };
 
   const prevMonth = () => {
     if (displayMonth === 1) { setDisplayYear(y => y - 1); setDisplayMonth(12); }
@@ -215,29 +234,62 @@ export default function DayBar({ goalCalories, selectedDate, onSelectDate, refre
         </div>
       </div>
 
-      <div ref={scrollRef} className="overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-        <div className="flex gap-0.5 pb-1" style={{ minWidth: "max-content" }}>
-          {summaries.map((s) => {
-            const dayNum   = parseInt(s.date.split("-")[2]);
-            const isToday  = s.date === today;
-            const isFuture = s.date > today;
+      <div className="relative flex items-center">
+        {/* Left scroll button */}
+        {canScrollLeft && (
+          <button
+            onClick={() => scrollBy(-160)}
+            className="absolute left-0 z-10 w-6 h-full flex items-center justify-center
+                       bg-gradient-to-r from-surface via-surface to-transparent
+                       text-text-muted hover:text-text transition-colors text-base leading-none"
+            aria-label="Scroll left"
+          >
+            ‹
+          </button>
+        )}
 
-            return (
-              <div key={s.date} ref={isToday ? todayRef : undefined}>
-                <DayCircle
-                  day={dayNum}
-                  date={s.date}
-                  calories={calMap[s.date] ?? null}
-                  goalCalories={goalCalories}
-                  isToday={isToday}
-                  isSelected={s.date === selectedDate}
-                  isFuture={isFuture}
-                  onClick={() => !isFuture && onSelectDate(s.date)}
-                />
-              </div>
-            );
-          })}
+        <div
+          ref={scrollRef}
+          className="overflow-x-auto w-full"
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          onScroll={updateScrollButtons}
+        >
+          <div className="flex gap-0.5 pb-1" style={{ minWidth: "max-content" }}>
+            {summaries.map((s) => {
+              const dayNum   = parseInt(s.date.split("-")[2]);
+              const isToday  = s.date === today;
+              const isFuture = s.date > today;
+
+              return (
+                <div key={s.date} ref={isToday ? todayRef : undefined}>
+                  <DayCircle
+                    day={dayNum}
+                    date={s.date}
+                    calories={calMap[s.date] ?? null}
+                    goalCalories={goalCalories}
+                    isToday={isToday}
+                    isSelected={s.date === selectedDate}
+                    isFuture={isFuture}
+                    onClick={() => !isFuture && onSelectDate(s.date)}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
+
+        {/* Right scroll button */}
+        {canScrollRight && (
+          <button
+            onClick={() => scrollBy(160)}
+            className="absolute right-0 z-10 w-6 h-full flex items-center justify-center
+                       bg-gradient-to-l from-surface via-surface to-transparent
+                       text-text-muted hover:text-text transition-colors text-base leading-none"
+            aria-label="Scroll right"
+          >
+            ›
+          </button>
+        )}
       </div>
     </div>
   );
