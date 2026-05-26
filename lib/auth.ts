@@ -20,7 +20,13 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
         const email = credentials.email.toLowerCase().trim();
-        const user  = await getUser(email);
+        let user;
+        try {
+          user = await getUser(email);
+        } catch (err) {
+          console.error("[auth] Redis error during getUser:", err);
+          throw new Error("Database unavailable. Please try again.");
+        }
         if (!user) {
           console.error("[auth] no user found for:", email);
           return null;

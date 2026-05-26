@@ -36,24 +36,40 @@ export async function GET(req: Request) {
 
   const daysInMonth = new Date(year, month, 0).getDate();
   const monthStr    = String(month).padStart(2, "0");
+  const userId      = session.user.id;
 
-  const redis  = getRedis();
-  const userId = session.user.id;
+  // Build all keys for the month
+  const days = Array.from({ length: daysInMonth }, (_, i) => {
+    const day = String(i + 1).padStart(2, "0");
+    return `${year}-${monthStr}-${day}`;
+  });
 
-  const results: DaySummary[] = await Promise.all(
-    Array.from({ length: daysInMonth }, async (_, i) => {
-      const day  = String(i + 1).padStart(2, "0");
-      const date = `${year}-${monthStr}-${day}`;
+  try {
+    const redis = getRedis();
+
+    // Use a single pipeline to fetch all days in one round-trip instead of 28–31 calls
+    const pipeline = redis.pipeline();
+    for (const date of days) {
+      pipeline.get(`user:${userId}:meals:${date}`);
+    }
+    const raws = await pipeline.exec();
+
+    const results: DaySummary[] = days.map((date, i) => {
       try {
-        const raw = await redis.get(`user:${userId}:meals:${date}`);
+        const raw = raws[i];
         if (!raw) return { date, calories: null };
         const meals = typeof raw === "string" ? JSON.parse(raw) : raw;
         return { date, calories: computeCalories(meals) };
       } catch {
         return { date, calories: null };
       }
-    })
-  );
+    });
 
-  return NextResponse.json(results);
+    return NextResponse.json(results);
+  } catch (err) {
+    console.error("[month] Redis error:", err);
+    // Return empty data rather than a 500 — DayBar can still render the skeleton
+    const results: DaySummary[] = days.map((date) => ({ date, calories: null }));
+    return NextResponse.json(results);
+  }
 }
