@@ -1,17 +1,21 @@
 "use client";
 
+import { signOut } from "next-auth/react";
 import ThemeToggle from "./ThemeToggle";
 import type { Theme } from "@/lib/theme";
 
 interface Props {
-  themePref:   Theme;
-  onCycleTheme:() => void;
-  onGoals:     () => void;
-  onReset:     () => void;
-  onAddFood:   () => void;
+  themePref:    Theme;
+  onCycleTheme: () => void;
+  onGoals:      () => void;
+  onReset:      () => void;
+  onAddFood:    () => void;
+  userEmail?:   string;
 }
 
-export default function Header({ themePref, onCycleTheme, onGoals, onReset, onAddFood }: Props) {
+export default function Header({
+  themePref, onCycleTheme, onGoals, onReset, onAddFood, userEmail,
+}: Props) {
   return (
     <header className="sticky top-0 z-30 bg-bg/80 backdrop-blur-md border-b border-border-soft px-4 sm:px-6">
       <div className="max-w-4xl mx-auto h-14 flex items-center justify-between gap-2">
@@ -61,6 +65,23 @@ export default function Header({ themePref, onCycleTheme, onGoals, onReset, onAd
           >
             Admin
           </a>
+
+          {/* User info + sign out */}
+          {userEmail && (
+            <>
+              <span className="hidden sm:inline text-xs text-text-muted truncate max-w-[120px]"
+                    title={userEmail}>
+                {userEmail}
+              </span>
+              <button
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="text-xs text-text-muted hover:text-danger px-2.5 py-1.5 rounded-lg
+                           hover:bg-danger/10 transition-colors focus-accent"
+              >
+                Sign out
+              </button>
+            </>
+          )}
         </nav>
       </div>
     </header>

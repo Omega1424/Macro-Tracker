@@ -11,11 +11,13 @@ import ThemeToggle from "@/components/ThemeToggle";
 export default function AdminPage() {
   const { pref: themePref, cycle: cycleTheme } = useTheme();
 
-  const [password, setPassword] = useState("");
-  const [authed,   setAuthed]   = useState(false);
-  const [authErr,  setAuthErr]  = useState("");
-  const [foods,    setFoods]    = useState<Food[]>([]);
-  const [addOpen,  setAddOpen]  = useState(false);
+  const [password,  setPassword]  = useState("");
+  const [authed,    setAuthed]    = useState(false);
+  const [authErr,   setAuthErr]   = useState("");
+  const [foods,     setFoods]     = useState<Food[]>([]);
+  const [addOpen,   setAddOpen]   = useState(false);
+  const [selected,  setSelected]  = useState<Set<string>>(new Set());
+  const [deleting,  setDeleting]  = useState(false);
 
   // Restore session
   useEffect(() => {
@@ -36,7 +38,6 @@ export default function AdminPage() {
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setAuthErr("");
-    // Probe: a real add with dummy body returns 400 if auth OK, 401 if not
     const res = await fetch("/api/foods/add", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-admin-password": password },
@@ -50,7 +51,7 @@ export default function AdminPage() {
     }
   };
 
-  /* ── Delete ── */
+  /* ── Delete single ── */
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Delete "${name}"?`)) return;
     const res = await fetch("/api/foods/delete", {
@@ -58,13 +59,54 @@ export default function AdminPage() {
       headers: { "Content-Type": "application/json", "x-admin-password": password },
       body: JSON.stringify({ id }),
     });
-    if (res.ok) setFoods((prev) => prev.filter((f) => f.id !== id));
+    if (res.ok) {
+      setFoods((prev) => prev.filter((f) => f.id !== id));
+      setSelected((prev) => { const s = new Set(prev); s.delete(id); return s; });
+    }
   };
+
+  /* ── Delete selected (bulk) ── */
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) return;
+    const names = foods.filter((f) => selected.has(f.id)).map((f) => f.name).join(", ");
+    if (!confirm(`Delete ${selected.size} food${selected.size > 1 ? "s" : ""}?\n\n${names}`)) return;
+    setDeleting(true);
+    await Promise.all(
+      [...selected].map((id) =>
+        fetch("/api/foods/delete", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json", "x-admin-password": password },
+          body: JSON.stringify({ id }),
+        })
+      )
+    );
+    setFoods((prev) => prev.filter((f) => !selected.has(f.id)));
+    setSelected(new Set());
+    setDeleting(false);
+  };
+
+  /* ── Selection helpers ── */
+  const toggleOne = (id: string) =>
+    setSelected((prev) => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+
+  const toggleAll = (ids: string[]) =>
+    setSelected((prev) => {
+      const allChecked = ids.every((id) => prev.has(id));
+      const s = new Set(prev);
+      if (allChecked) ids.forEach((id) => s.delete(id));
+      else            ids.forEach((id) => s.add(id));
+      return s;
+    });
 
   const handleSignOut = () => {
     sessionStorage.removeItem("admin_pw");
     setAuthed(false);
     setPassword("");
+    setSelected(new Set());
   };
 
   /* ── Login screen ── */
@@ -163,6 +205,34 @@ export default function AdminPage() {
         </div>
       </header>
 
+      {/* Bulk-delete bar — floats above content when items are selected */}
+      {selected.size > 0 && (
+        <div className="sticky top-14 z-20 bg-danger/10 border-b border-danger/20 px-4 sm:px-6 py-2.5">
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+            <span className="text-sm text-danger font-medium">
+              {selected.size} item{selected.size > 1 ? "s" : ""} selected
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setSelected(new Set())}
+                className="text-xs text-text-muted hover:text-text px-2.5 py-1 rounded-lg
+                           hover:bg-surface transition-colors"
+              >
+                Clear
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={deleting}
+                className="text-xs font-medium text-white bg-danger hover:bg-danger/80
+                           disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                {deleting ? "Deleting…" : `Delete ${selected.size}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: stats + add button */}
         <section className="flex flex-col gap-4">
@@ -190,9 +260,13 @@ export default function AdminPage() {
 
           {/* Custom foods list */}
           <div>
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
-              Custom foods ({customFoods.length})
-            </p>
+            <SectionHeader
+              label="Custom foods"
+              count={customFoods.length}
+              ids={customFoods.map((f) => f.id)}
+              selected={selected}
+              onToggleAll={toggleAll}
+            />
             {customFoods.length === 0 ? (
               <p className="text-sm text-text-muted bg-surface border border-border-soft
                             rounded-xl px-4 py-4">
@@ -201,7 +275,13 @@ export default function AdminPage() {
             ) : (
               <ul className="flex flex-col gap-2">
                 {customFoods.map((f) => (
-                  <FoodRow key={f.id} food={f} onDelete={() => handleDelete(f.id, f.name)} />
+                  <FoodRow
+                    key={f.id}
+                    food={f}
+                    checked={selected.has(f.id)}
+                    onToggle={() => toggleOne(f.id)}
+                    onDelete={() => handleDelete(f.id, f.name)}
+                  />
                 ))}
               </ul>
             )}
@@ -210,18 +290,28 @@ export default function AdminPage() {
 
         {/* Right: default foods */}
         <section>
-          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
-            Default foods ({defaultFoods.length})
-          </p>
+          <SectionHeader
+            label="Default foods"
+            count={defaultFoods.length}
+            ids={defaultFoods.map((f) => f.id)}
+            selected={selected}
+            onToggleAll={toggleAll}
+          />
           <ul className="flex flex-col gap-2">
             {defaultFoods.map((f) => (
-              <FoodRow key={f.id} food={f} />
+              <FoodRow
+                key={f.id}
+                food={f}
+                checked={selected.has(f.id)}
+                onToggle={() => toggleOne(f.id)}
+                onDelete={() => handleDelete(f.id, f.name)}
+              />
             ))}
           </ul>
         </section>
       </main>
 
-      {/* Add food modal — pass admin password so delete still works */}
+      {/* Add food modal */}
       <AddFoodModal
         open={addOpen}
         adminPassword={password}
@@ -244,11 +334,60 @@ function StatCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function FoodRow({ food, onDelete }: { food: Food; onDelete?: () => void }) {
+function SectionHeader({
+  label, count, ids, selected, onToggleAll,
+}: {
+  label: string;
+  count: number;
+  ids: string[];
+  selected: Set<string>;
+  onToggleAll: (ids: string[]) => void;
+}) {
+  const allChecked = ids.length > 0 && ids.every((id) => selected.has(id));
+  const someChecked = !allChecked && ids.some((id) => selected.has(id));
+
   return (
-    <li className="flex items-center justify-between bg-surface border border-border-soft
-                   rounded-xl px-4 py-3 gap-3 group shadow-[0_1px_2px_rgba(0,0,0,0.03)]
-                   hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)] transition-shadow">
+    <div className="flex items-center gap-2 mb-3">
+      {ids.length > 0 && (
+        <input
+          type="checkbox"
+          checked={allChecked}
+          ref={(el) => { if (el) el.indeterminate = someChecked; }}
+          onChange={() => onToggleAll(ids)}
+          aria-label={`Select all ${label}`}
+          className="w-3.5 h-3.5 rounded accent-accent cursor-pointer"
+        />
+      )}
+      <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+        {label} ({count})
+      </p>
+    </div>
+  );
+}
+
+function FoodRow({
+  food, checked, onToggle, onDelete,
+}: {
+  food: Food;
+  checked: boolean;
+  onToggle: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <li
+      className={`flex items-center bg-surface border rounded-xl px-4 py-3 gap-3 group
+                  shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.05)]
+                  transition-all cursor-pointer
+                  ${checked ? "border-danger/40 bg-danger/5" : "border-border-soft"}`}
+      onClick={onToggle}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        onClick={(e) => e.stopPropagation()}
+        className="w-3.5 h-3.5 flex-shrink-0 rounded accent-accent cursor-pointer"
+      />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-text truncate">{food.name}</p>
         <p className="text-xs text-text-muted tabular">
@@ -256,22 +395,15 @@ function FoodRow({ food, onDelete }: { food: Food; onDelete?: () => void }) {
           {food.protein}g P · {food.carbs}g C · {food.fat}g F
         </p>
       </div>
-      {onDelete ? (
-        <button
-          onClick={onDelete}
-          className="flex-shrink-0 text-xs text-text-muted hover:text-danger hover:bg-danger/10
-                     transition-colors px-2.5 py-1 rounded-lg opacity-0 group-hover:opacity-100
-                     focus:opacity-100 focus-accent"
-          aria-label={`Delete ${food.name}`}
-        >
-          Delete
-        </button>
-      ) : (
-        <span className="flex-shrink-0 text-xs text-text-muted bg-surface-2
-                         px-2 py-0.5 rounded-md">
-          default
-        </span>
-      )}
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        className="flex-shrink-0 text-xs text-text-muted hover:text-danger hover:bg-danger/10
+                   transition-colors px-2.5 py-1 rounded-lg opacity-0 group-hover:opacity-100
+                   focus:opacity-100 focus-accent"
+        aria-label={`Delete ${food.name}`}
+      >
+        Delete
+      </button>
     </li>
   );
 }
