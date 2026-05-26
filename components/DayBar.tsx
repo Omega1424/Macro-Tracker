@@ -131,41 +131,89 @@ interface Props {
 }
 
 export default function DayBar({ goalCalories, selectedDate, onSelectDate, refreshKey }: Props) {
-  const [summaries, setSummaries] = useState<DaySummary[]>([]);
+  const [summaries,    setSummaries]    = useState<DaySummary[]>([]);
+  const [displayYear,  setDisplayYear]  = useState(() => new Date().getUTCFullYear());
+  const [displayMonth, setDisplayMonth] = useState(() => new Date().getUTCMonth() + 1);
+
   const todayRef  = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const today = new Date().toISOString().split("T")[0];
-  const now   = new Date();
-  const year  = now.getUTCFullYear();
-  const month = now.getUTCMonth();
+  const today    = new Date().toISOString().split("T")[0];
+  const nowYear  = new Date().getUTCFullYear();
+  const nowMonth = new Date().getUTCMonth() + 1;
+  const isCurrentMonth = displayYear === nowYear && displayMonth === nowMonth;
 
   const load = useCallback(() => {
-    fetch("/api/user/meals/month")
+    fetch(`/api/user/meals/month?year=${displayYear}&month=${displayMonth}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => { if (data) setSummaries(data); })
       .catch(console.error);
-  }, []);
+  }, [displayYear, displayMonth]);
 
   useEffect(() => { load(); }, [load, refreshKey]);
 
-  // Scroll selected date into center
+  // When month changes, scroll selected date (or today) into view
   useEffect(() => {
-    if (todayRef.current && scrollRef.current) {
-      const el     = todayRef.current;
-      const parent = scrollRef.current;
-      parent.scrollLeft = el.offsetLeft + el.offsetWidth / 2 - parent.clientWidth / 2;
+    if (!scrollRef.current) return;
+    // Try to scroll the selected date into center first, else today
+    const targetDate = summaries.find(s => s.date === selectedDate) ? selectedDate : today;
+    const idx = summaries.findIndex(s => s.date === targetDate);
+    if (idx >= 0) {
+      const itemWidth = 52; // approx width per item
+      const parent    = scrollRef.current;
+      parent.scrollLeft = idx * itemWidth - parent.clientWidth / 2 + itemWidth / 2;
     }
-  }, [summaries]);
+  }, [summaries, selectedDate, today]);
+
+  const prevMonth = () => {
+    if (displayMonth === 1) { setDisplayYear(y => y - 1); setDisplayMonth(12); }
+    else setDisplayMonth(m => m - 1);
+  };
+
+  const nextMonth = () => {
+    if (isCurrentMonth) return; // can't go past current month
+    if (displayMonth === 12) { setDisplayYear(y => y + 1); setDisplayMonth(1); }
+    else setDisplayMonth(m => m + 1);
+  };
 
   const calMap = Object.fromEntries(summaries.map((s) => [s.date, s.calories]));
 
   return (
     <div className="bg-surface border border-border-soft rounded-2xl px-4 py-3
                     shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
-        {MONTHS[month]} {year}
-      </p>
+      {/* Header with month nav */}
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+          {MONTHS[displayMonth - 1]} {displayYear}
+        </p>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={prevMonth}
+            className="w-6 h-6 flex items-center justify-center rounded-lg text-text-muted
+                       hover:text-text hover:bg-surface-2 transition-colors text-sm"
+          >
+            ‹
+          </button>
+          {!isCurrentMonth && (
+            <button
+              onClick={nextMonth}
+              className="w-6 h-6 flex items-center justify-center rounded-lg text-text-muted
+                         hover:text-text hover:bg-surface-2 transition-colors text-sm"
+            >
+              ›
+            </button>
+          )}
+          {!isCurrentMonth && (
+            <button
+              onClick={() => { setDisplayYear(nowYear); setDisplayMonth(nowMonth); }}
+              className="text-[10px] text-accent hover:text-accent-hover px-2 py-0.5 rounded-md
+                         hover:bg-accent-surface transition-colors ml-1"
+            >
+              Today
+            </button>
+          )}
+        </div>
+      </div>
 
       <div ref={scrollRef} className="overflow-x-auto" style={{ scrollbarWidth: "none" }}>
         <div className="flex gap-0.5 pb-1" style={{ minWidth: "max-content" }}>

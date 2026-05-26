@@ -25,13 +25,15 @@ export interface DaySummary {
   calories: number | null;  // null = no data
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json(null, { status: 401 });
 
-  const now         = new Date();
-  const year        = now.getUTCFullYear();
-  const month       = now.getUTCMonth() + 1;
+  const { searchParams } = new URL(req.url);
+  const now   = new Date();
+  const year  = parseInt(searchParams.get("year")  ?? String(now.getUTCFullYear()));
+  const month = parseInt(searchParams.get("month") ?? String(now.getUTCMonth() + 1));
+
   const daysInMonth = new Date(year, month, 0).getDate();
   const monthStr    = String(month).padStart(2, "0");
 
