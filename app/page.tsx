@@ -28,6 +28,25 @@ function emptyPlan(): Meal[] {
   return [{ id: genId(), name: "Breakfast", items: [] }];
 }
 
+/** Convert old Record<string, MealItem[]> format OR validate new Meal[] format */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function migrateMeals(data: any): Meal[] {
+  if (!data) return emptyPlan();
+  // New format: array with id/name/items
+  if (Array.isArray(data)) {
+    if (data.length === 0) return emptyPlan();
+    if (data[0]?.id && data[0]?.name && Array.isArray(data[0]?.items)) return data as Meal[];
+  }
+  // Old format: plain object { Breakfast: [], Lunch: [], ... }
+  if (typeof data === "object") {
+    const meals: Meal[] = Object.entries(data)
+      .filter(([, items]) => Array.isArray(items))
+      .map(([name, items]) => ({ id: genId(), name, items: items as MealItem[] }));
+    return meals.length > 0 ? meals : emptyPlan();
+  }
+  return emptyPlan();
+}
+
 /* ─────────────────────────────────────────────────────────── */
 
 export default function HomePage() {
@@ -63,7 +82,7 @@ export default function HomePage() {
 
     const fromHash = getHashPlan<Meal[]>();
     if (fromHash) {
-      setMeals(fromHash);
+      setMeals(migrateMeals(fromHash));
       setHydrated(true);
       return;
     }
@@ -72,7 +91,7 @@ export default function HomePage() {
       fetch("/api/user/meals").then((r) => r.ok ? r.json() : null),
       fetch("/api/user/goals").then((r) => r.ok ? r.json() : null),
     ]).then(([savedMeals, savedGoals]) => {
-      if (savedMeals) setMeals(savedMeals);
+      if (savedMeals) setMeals(migrateMeals(savedMeals));
       if (savedGoals) setGoals({ ...DEFAULT_GOALS, ...savedGoals });
       setHydrated(true);
     }).catch(() => setHydrated(true));
