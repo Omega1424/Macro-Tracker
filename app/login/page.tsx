@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, FormEvent } from "react";
-import { signIn } from "next-auth/react";
+import { useState, FormEvent, useEffect } from "react";
+import { signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@/lib/theme";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -18,6 +18,17 @@ export default function LoginPage() {
   const [confirm,  setConfirm]  = useState("");
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  // When NextAuth redirects here with ?error=SessionRequired, there's a stale
+  // session cookie that blocks CSRF validation. Sign out silently to clear it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error")) {
+      setClearing(true);
+      signOut({ redirect: false }).finally(() => setClearing(false));
+    }
+  }, []);
 
   const reset = (t: Tab) => { setTab(t); setError(""); setPassword(""); setConfirm(""); };
 
@@ -183,13 +194,15 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || clearing}
               className="py-2.5 bg-accent text-white text-sm font-medium rounded-[10px]
                          hover:bg-accent-hover disabled:opacity-50 transition-colors focus-accent"
             >
-              {loading
-                ? (tab === "signin" ? "Signing in…" : "Creating account…")
-                : (tab === "signin" ? "Sign in" : "Create account")}
+              {clearing
+                ? "Preparing…"
+                : loading
+                  ? (tab === "signin" ? "Signing in…" : "Creating account…")
+                  : (tab === "signin" ? "Sign in" : "Create account")}
             </button>
           </form>
         </div>
