@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import type { Food } from "@/lib/foods";
 import type { MacroTotals } from "@/lib/macros";
 import { addTotals, emptyTotals } from "@/lib/macros";
@@ -52,8 +53,16 @@ function formatDateLabel(date: string) {
 /* ─────────────────────────────────────────────────────────── */
 
 export default function HomePage() {
-  const { data: session, status } = useSession({ required: true });
+  const { data: session, status } = useSession();
   const { pref: themePref, cycle: cycleTheme } = useTheme();
+  const router = useRouter();
+
+  // Redirect to clean /login (no ?error= params) when not authenticated
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login");
+    }
+  }, [status, router]);
 
   const [foods,        setFoods]        = useState<Food[]>([]);
   const [meals,        setMeals]        = useState<Meal[]>(emptyPlan());
