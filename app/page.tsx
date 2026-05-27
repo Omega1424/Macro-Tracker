@@ -265,7 +265,6 @@ export default function HomePage() {
         themePref={themePref}
         onCycleTheme={cycleTheme}
         onGoals={() => setGoalsOpen(true)}
-        onReset={handleReset}
         onAddFood={() => { setAddPrefill(""); setAddFoodOpen(true); }}
         userEmail={session?.user?.email ?? undefined}
       />
@@ -414,6 +413,20 @@ export default function HomePage() {
           isFuture={viewDate > todayStr()}
           onSaved={setWeightKg}
         />
+
+        {/* Reset day */}
+        {viewDate <= todayStr() && (
+          <div className="flex justify-center pb-2">
+            <button
+              onClick={handleReset}
+              className="text-xs text-danger/70 hover:text-white hover:bg-danger
+                         px-4 py-2 rounded-lg transition-colors border border-danger/20
+                         hover:border-danger"
+            >
+              Clear meal plan for {isToday ? "today" : formatDateLabel(viewDate)}
+            </button>
+          </div>
+        )}
 
       </main>
 

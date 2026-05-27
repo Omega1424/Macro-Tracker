@@ -9,13 +9,12 @@ interface Props {
   themePref:    Theme;
   onCycleTheme: () => void;
   onGoals:      () => void;
-  onReset:      () => void;
   onAddFood:    () => void;
   userEmail?:   string;
 }
 
 export default function Header({
-  themePref, onCycleTheme, onGoals, onReset, onAddFood, userEmail,
+  themePref, onCycleTheme, onGoals, onAddFood, userEmail,
 }: Props) {
   return (
     <header className="sticky top-0 z-30 bg-bg/80 backdrop-blur-md border-b border-border-soft px-4 sm:px-6">
@@ -46,15 +45,6 @@ export default function Header({
             aria-label="Set daily goals"
           >
             Goals
-          </button>
-
-          <button
-            onClick={onReset}
-            className="text-xs text-text-2 hover:text-danger px-2.5 py-1.5 rounded-lg
-                       hover:bg-danger/10 transition-colors focus-accent"
-            aria-label="Reset today's meal plan"
-          >
-            Reset
           </button>
 
           <ThemeToggle pref={themePref} onCycle={onCycleTheme} />
