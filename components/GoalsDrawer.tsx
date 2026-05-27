@@ -93,7 +93,7 @@ export default function GoalsDrawer({ open, goals, onSave, onClose }: Props) {
         <div className="flex items-center justify-between px-6 py-5 border-b border-border-soft">
           <div>
             <h2 className="text-sm font-semibold text-text">Daily Goals</h2>
-            <p className="text-xs text-text-muted mt-0.5">Set your macro targets</p>
+            <p className="text-xs text-text-muted mt-0.5">Macros, water &amp; supplements</p>
           </div>
           <button
             onClick={onClose}
@@ -136,6 +136,17 @@ export default function GoalsDrawer({ open, goals, onSave, onClose }: Props) {
             onChange={(v) => handleChange("fat", v)}
             color="bg-pink-500"
           />
+
+          {/* Water goal */}
+          <div className="border-t border-border-soft pt-4">
+            <GoalField
+              label="💧 Water"
+              unit="ml"
+              value={draft.waterGoal ?? 2500}
+              onChange={(v) => handleChange("waterGoal", v)}
+              color="bg-blue-500"
+            />
+          </div>
 
           <button
             onClick={handleReset}

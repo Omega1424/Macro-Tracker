@@ -109,3 +109,23 @@ export async function saveUserSupplements(userId: string, date: string, checks: 
   const redis = getRedis();
   await redis.set(`user:${userId}:supplements:${date}`, JSON.stringify(checks), { ex: 60 * 60 * 24 * 30 });
 }
+
+/* ── Water intake ───────────────────────────────────────── */
+
+export async function getUserWater(userId: string, date: string): Promise<number> {
+  try {
+    const redis = getRedis();
+    const raw   = await redis.get(`user:${userId}:water:${date}`);
+    if (!raw) return 0;
+    const val = typeof raw === "string" ? Number(raw) : raw as number;
+    return isNaN(val as number) ? 0 : val as number;
+  } catch (err) {
+    console.error("[userdb] getUserWater error:", err);
+    return 0;
+  }
+}
+
+export async function saveUserWater(userId: string, date: string, ml: number): Promise<void> {
+  const redis = getRedis();
+  await redis.set(`user:${userId}:water:${date}`, String(ml), { ex: 60 * 60 * 24 * 30 });
+}

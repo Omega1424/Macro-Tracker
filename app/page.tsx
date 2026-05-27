@@ -18,6 +18,7 @@ import MealCard, { type Meal, type MealItem, makeMealItem } from "@/components/M
 import GoalsDrawer          from "@/components/GoalsDrawer";
 import AddFoodModal         from "@/components/AddFoodModal";
 import SupplementChecklist  from "@/components/SupplementChecklist";
+import WaterTracker         from "@/components/WaterTracker";
 
 /* ─────────────────────────────────────────────────────────── */
 
@@ -78,6 +79,7 @@ export default function HomePage() {
   const [addingMeal,   setAddingMeal]   = useState(false);
   const [customName,   setCustomName]   = useState("");
   const [suppChecks,   setSuppChecks]   = useState<Record<string, boolean>>({});
+  const [waterMl,      setWaterMl]      = useState(0);
 
   const saveMealsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isToday = viewDate === todayStr();
@@ -109,10 +111,12 @@ export default function HomePage() {
       fetch(`/api/user/meals?date=${viewDate}`).then((r) => r.ok ? r.json() : null),
       fetch("/api/user/goals").then((r) => r.ok ? r.json() : null),
       fetch(`/api/user/supplements?date=${viewDate}`).then((r) => r.ok ? r.json() : {}),
-    ]).then(([savedMeals, savedGoals, savedChecks]) => {
+      fetch(`/api/user/water?date=${viewDate}`).then((r) => r.ok ? r.json() : 0),
+    ]).then(([savedMeals, savedGoals, savedChecks, savedWater]) => {
       setMeals(savedMeals ? migrateMeals(savedMeals) : emptyPlan());
       if (savedGoals) setGoals({ ...DEFAULT_GOALS, ...savedGoals });
       setSuppChecks(savedChecks ?? {});
+      setWaterMl(savedWater ?? 0);
       setHydrated(true);
     }).catch(() => setHydrated(true));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -217,6 +221,15 @@ export default function HomePage() {
     }).catch(console.error);
   };
 
+  const handleWaterChange = (ml: number) => {
+    setWaterMl(ml);
+    fetch(`/api/user/water?date=${viewDate}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ml }),
+    }).catch(console.error);
+  };
+
   const handleShare = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -255,6 +268,13 @@ export default function HomePage() {
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
         <DailySummary totals={daily} goals={goals} />
+
+        <WaterTracker
+          waterMl={waterMl}
+          goalMl={goals.waterGoal ?? 2500}
+          isFuture={viewDate > todayStr()}
+          onChange={handleWaterChange}
+        />
 
         <SupplementChecklist
           supplements={goals.supplements ?? []}

@@ -21,9 +21,12 @@ export default function SupplementChecklist({ supplements, checks, isFuture, onC
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-          Supplements
-        </p>
+        <div className="flex items-center gap-1.5">
+          <span className="text-base leading-none">💊</span>
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+            Supplements
+          </p>
+        </div>
         <span className="text-xs text-text-muted tabular">
           {done}/{total}
         </span>

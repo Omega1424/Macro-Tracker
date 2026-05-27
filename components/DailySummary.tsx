@@ -21,6 +21,12 @@ export default function DailySummary({ totals, goals }: Props) {
       className="bg-surface border border-border-soft rounded-2xl p-5
                  shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden"
     >
+      {/* Section label */}
+      <div className="flex items-center gap-1.5 mb-4">
+        <span className="text-base leading-none">🍽️</span>
+        <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Nutrition</p>
+      </div>
+
       <div className="flex flex-col sm:flex-row gap-6">
         {/* Left: Donut */}
         <div className="flex justify-center sm:flex-shrink-0">

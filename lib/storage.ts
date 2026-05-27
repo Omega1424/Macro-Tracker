@@ -14,6 +14,7 @@ export const DEFAULT_GOALS = {
   protein:     160,
   carbs:       250,
   fat:          80,
+  waterGoal:   2500,          // ml per day
   supplements: [] as string[],
 };
 
