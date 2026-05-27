@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { Goals } from "@/lib/storage";
-import { DEFAULT_GOALS } from "@/lib/storage";
+import { DEFAULT_GOALS, PRESET_SUPPLEMENTS } from "@/lib/storage";
 
 interface Props {
   open:     boolean;
@@ -12,7 +12,8 @@ interface Props {
 }
 
 export default function GoalsDrawer({ open, goals, onSave, onClose }: Props) {
-  const [draft, setDraft] = useState<Goals>({ ...goals });
+  const [draft,       setDraft]       = useState<Goals>({ ...goals });
+  const [customSupp,  setCustomSupp]  = useState("");
   const firstRef = useRef<HTMLInputElement>(null);
 
   // Sync draft when goals prop changes
@@ -34,6 +35,33 @@ export default function GoalsDrawer({ open, goals, onSave, onClose }: Props) {
 
   const handleSave = () => { onSave(draft); onClose(); };
   const handleReset = () => setDraft({ ...DEFAULT_GOALS });
+
+  const supplementList: string[] = draft.supplements ?? [];
+
+  const togglePreset = (name: string) => {
+    setDraft((d) => {
+      const list = d.supplements ?? [];
+      return {
+        ...d,
+        supplements: list.includes(name) ? list.filter((s) => s !== name) : [...list, name],
+      };
+    });
+  };
+
+  const addCustom = () => {
+    const name = customSupp.trim();
+    if (!name) return;
+    setDraft((d) => {
+      const list = d.supplements ?? [];
+      if (list.includes(name)) return d;
+      return { ...d, supplements: [...list, name] };
+    });
+    setCustomSupp("");
+  };
+
+  const removeSupp = (name: string) => {
+    setDraft((d) => ({ ...d, supplements: (d.supplements ?? []).filter((s) => s !== name) }));
+  };
 
   return (
     <>
@@ -115,6 +143,83 @@ export default function GoalsDrawer({ open, goals, onSave, onClose }: Props) {
           >
             Reset to defaults
           </button>
+
+          {/* ── Supplements ─────────────────────────────── */}
+          <div className="border-t border-border-soft pt-4 flex flex-col gap-3">
+            <div>
+              <p className="text-sm font-medium text-text">Supplements</p>
+              <p className="text-xs text-text-muted mt-0.5">
+                Track which supplements you take daily
+              </p>
+            </div>
+
+            {/* Preset chips */}
+            <div className="flex flex-wrap gap-2">
+              {PRESET_SUPPLEMENTS.map((name) => {
+                const active = supplementList.includes(name);
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => togglePreset(name)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors
+                      ${active
+                        ? "bg-accent text-white border-accent"
+                        : "border-border text-text-muted hover:border-accent hover:text-accent"
+                      }`}
+                  >
+                    {active ? "✓ " : "+ "}{name}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Active supplements (shows custom ones + ability to remove) */}
+            {supplementList.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {supplementList.map((name) => (
+                  <span
+                    key={name}
+                    className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full
+                               bg-accent-surface text-accent border border-accent/20"
+                  >
+                    {name}
+                    <button
+                      type="button"
+                      onClick={() => removeSupp(name)}
+                      className="hover:text-red-400 transition-colors leading-none"
+                      aria-label={`Remove ${name}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Custom supplement input */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customSupp}
+                onChange={(e) => setCustomSupp(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
+                placeholder="Custom supplement…"
+                className="flex-1 text-sm border border-border rounded-[10px] px-3 py-2 bg-bg text-text
+                           placeholder-text-muted focus:outline-none focus:border-accent
+                           focus:ring-2 focus:ring-accent/20 transition-colors"
+              />
+              <button
+                type="button"
+                onClick={addCustom}
+                disabled={!customSupp.trim()}
+                className="px-3 py-2 bg-accent text-white text-sm rounded-[10px]
+                           hover:bg-accent-hover disabled:opacity-30 transition-colors"
+              >
+                Add
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Footer */}

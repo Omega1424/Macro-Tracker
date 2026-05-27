@@ -10,13 +10,24 @@ export const KEYS = {
 } as const;
 
 export const DEFAULT_GOALS = {
-  calories: 2200,
-  protein:  160,
-  carbs:    250,
-  fat:       80,
+  calories:    2200,
+  protein:     160,
+  carbs:       250,
+  fat:          80,
+  supplements: [] as string[],
 };
 
 export type Goals = typeof DEFAULT_GOALS;
+
+export const PRESET_SUPPLEMENTS = [
+  "Magnesium",
+  "Vitamin D",
+  "Zinc",
+  "Omega-3",
+  "Creatine",
+  "Vitamin B12",
+  "Iron",
+];
 
 function safeRead<T>(key: string): T | null {
   if (typeof window === "undefined") return null;

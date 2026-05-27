@@ -90,3 +90,22 @@ export async function saveUserMeals(userId: string, date: string, meals: unknown
   // 30-day TTL
   await redis.set(`user:${userId}:meals:${date}`, JSON.stringify(meals), { ex: 60 * 60 * 24 * 30 });
 }
+
+/* ── Supplement checks ──────────────────────────────────── */
+
+export async function getUserSupplements(userId: string, date: string): Promise<Record<string, boolean>> {
+  try {
+    const redis = getRedis();
+    const raw   = await redis.get(`user:${userId}:supplements:${date}`);
+    if (!raw) return {};
+    return typeof raw === "string" ? JSON.parse(raw) : raw as Record<string, boolean>;
+  } catch (err) {
+    console.error("[userdb] getUserSupplements error:", err);
+    return {};
+  }
+}
+
+export async function saveUserSupplements(userId: string, date: string, checks: Record<string, boolean>): Promise<void> {
+  const redis = getRedis();
+  await redis.set(`user:${userId}:supplements:${date}`, JSON.stringify(checks), { ex: 60 * 60 * 24 * 30 });
+}

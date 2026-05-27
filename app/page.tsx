@@ -11,12 +11,13 @@ import { DEFAULT_GOALS } from "@/lib/storage";
 import { getHashPlan, setHashPlan, clearHashPlan } from "@/lib/share";
 import { useTheme } from "@/lib/theme";
 
-import Header        from "@/components/Header";
-import DailySummary  from "@/components/DailySummary";
-import DayBar        from "@/components/DayBar";
+import Header               from "@/components/Header";
+import DailySummary         from "@/components/DailySummary";
+import DayBar               from "@/components/DayBar";
 import MealCard, { type Meal, type MealItem, makeMealItem } from "@/components/MealCard";
-import GoalsDrawer   from "@/components/GoalsDrawer";
-import AddFoodModal  from "@/components/AddFoodModal";
+import GoalsDrawer          from "@/components/GoalsDrawer";
+import AddFoodModal         from "@/components/AddFoodModal";
+import SupplementChecklist  from "@/components/SupplementChecklist";
 
 /* ─────────────────────────────────────────────────────────── */
 
@@ -69,13 +70,14 @@ export default function HomePage() {
   const [goals,        setGoals]        = useState<Goals>(DEFAULT_GOALS);
   const [hydrated,     setHydrated]     = useState(false);
   const [viewDate,     setViewDate]     = useState(todayStr());
-  const [dayBarKey,    setDayBarKey]    = useState(0);   // bumped after each save to refresh bar
+  const [dayBarKey,    setDayBarKey]    = useState(0);
   const [goalsOpen,    setGoalsOpen]    = useState(false);
   const [addFoodOpen,  setAddFoodOpen]  = useState(false);
   const [addPrefill,   setAddPrefill]   = useState("");
   const [shareMsg,     setShareMsg]     = useState("");
   const [addingMeal,   setAddingMeal]   = useState(false);
   const [customName,   setCustomName]   = useState("");
+  const [suppChecks,   setSuppChecks]   = useState<Record<string, boolean>>({});
 
   const saveMealsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isToday = viewDate === todayStr();
@@ -106,9 +108,11 @@ export default function HomePage() {
     Promise.all([
       fetch(`/api/user/meals?date=${viewDate}`).then((r) => r.ok ? r.json() : null),
       fetch("/api/user/goals").then((r) => r.ok ? r.json() : null),
-    ]).then(([savedMeals, savedGoals]) => {
+      fetch(`/api/user/supplements?date=${viewDate}`).then((r) => r.ok ? r.json() : {}),
+    ]).then(([savedMeals, savedGoals, savedChecks]) => {
       setMeals(savedMeals ? migrateMeals(savedMeals) : emptyPlan());
       if (savedGoals) setGoals({ ...DEFAULT_GOALS, ...savedGoals });
+      setSuppChecks(savedChecks ?? {});
       setHydrated(true);
     }).catch(() => setHydrated(true));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -203,6 +207,16 @@ export default function HomePage() {
 
   const handleFoodAdded = (food: Food) => setFoods((prev) => [...prev, food]);
 
+  const handleSuppToggle = (name: string, value: boolean) => {
+    const next = { ...suppChecks, [name]: value };
+    setSuppChecks(next);
+    fetch(`/api/user/supplements?date=${viewDate}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    }).catch(console.error);
+  };
+
   const handleShare = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -241,6 +255,13 @@ export default function HomePage() {
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
         <DailySummary totals={daily} goals={goals} />
+
+        <SupplementChecklist
+          supplements={goals.supplements ?? []}
+          checks={suppChecks}
+          isFuture={viewDate > todayStr()}
+          onChange={handleSuppToggle}
+        />
 
         <DayBar
           goalCalories={goals.calories}
