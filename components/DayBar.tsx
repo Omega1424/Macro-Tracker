@@ -234,14 +234,15 @@ export default function DayBar({ goalCalories, selectedDate, onSelectDate, refre
         </div>
       </div>
 
-      <div className="relative flex items-center">
-        {/* Left scroll button */}
+      <div className="relative">
+        {/* Left scroll button — vertically centered on the circle row */}
         {canScrollLeft && (
           <button
             onClick={() => scrollBy(-160)}
-            className="absolute left-0 z-10 w-6 h-full flex items-center justify-center
-                       bg-gradient-to-r from-surface via-surface to-transparent
-                       text-text-muted hover:text-text transition-colors text-base leading-none"
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-10
+                       w-7 h-8 flex items-center justify-center
+                       bg-gradient-to-r from-surface from-60% to-transparent
+                       text-text-muted hover:text-text transition-colors text-lg leading-none"
             aria-label="Scroll left"
           >
             ‹
@@ -250,8 +251,8 @@ export default function DayBar({ goalCalories, selectedDate, onSelectDate, refre
 
         <div
           ref={scrollRef}
-          className="overflow-x-auto w-full"
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          className="overflow-x-auto"
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none", paddingLeft: canScrollLeft ? 20 : 0, paddingRight: canScrollRight ? 20 : 0 }}
           onScroll={updateScrollButtons}
         >
           <div className="flex gap-0.5 pb-1" style={{ minWidth: "max-content" }}>
@@ -278,13 +279,14 @@ export default function DayBar({ goalCalories, selectedDate, onSelectDate, refre
           </div>
         </div>
 
-        {/* Right scroll button */}
+        {/* Right scroll button — vertically centered on the circle row */}
         {canScrollRight && (
           <button
             onClick={() => scrollBy(160)}
-            className="absolute right-0 z-10 w-6 h-full flex items-center justify-center
-                       bg-gradient-to-l from-surface via-surface to-transparent
-                       text-text-muted hover:text-text transition-colors text-base leading-none"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-10
+                       w-7 h-8 flex items-center justify-center
+                       bg-gradient-to-l from-surface from-60% to-transparent
+                       text-text-muted hover:text-text transition-colors text-lg leading-none"
             aria-label="Scroll right"
           >
             ›
