@@ -234,25 +234,22 @@ export default function DayBar({ goalCalories, selectedDate, onSelectDate, refre
         </div>
       </div>
 
-      <div className="relative">
-        {/* Left scroll button — vertically centered on the circle row */}
-        {canScrollLeft && (
-          <button
-            onClick={() => scrollBy(-160)}
-            className="absolute left-0 top-1/2 -translate-y-1/2 z-10
-                       w-7 h-8 flex items-center justify-center
-                       bg-gradient-to-r from-surface from-60% to-transparent
-                       text-text-muted hover:text-text transition-colors text-lg leading-none"
-            aria-label="Scroll left"
-          >
-            ‹
-          </button>
-        )}
+      <div className="flex items-center gap-1">
+        {/* Left scroll button — flex sibling, never overlaps circles */}
+        <button
+          onClick={() => scrollBy(-160)}
+          aria-label="Scroll left"
+          className={`flex-shrink-0 w-5 flex items-center justify-center self-center
+                      text-text-muted hover:text-text transition-colors text-lg leading-none
+                      ${canScrollLeft ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        >
+          ‹
+        </button>
 
         <div
           ref={scrollRef}
-          className="overflow-x-auto"
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none", paddingLeft: canScrollLeft ? 20 : 0, paddingRight: canScrollRight ? 20 : 0 }}
+          className="overflow-x-auto flex-1"
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           onScroll={updateScrollButtons}
         >
           <div className="flex gap-0.5 pb-1" style={{ minWidth: "max-content" }}>
@@ -279,19 +276,16 @@ export default function DayBar({ goalCalories, selectedDate, onSelectDate, refre
           </div>
         </div>
 
-        {/* Right scroll button — vertically centered on the circle row */}
-        {canScrollRight && (
-          <button
-            onClick={() => scrollBy(160)}
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-10
-                       w-7 h-8 flex items-center justify-center
-                       bg-gradient-to-l from-surface from-60% to-transparent
-                       text-text-muted hover:text-text transition-colors text-lg leading-none"
-            aria-label="Scroll right"
-          >
-            ›
-          </button>
-        )}
+        {/* Right scroll button — flex sibling, never overlaps circles */}
+        <button
+          onClick={() => scrollBy(160)}
+          aria-label="Scroll right"
+          className={`flex-shrink-0 w-5 flex items-center justify-center self-center
+                      text-text-muted hover:text-text transition-colors text-lg leading-none
+                      ${canScrollRight ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        >
+          ›
+        </button>
       </div>
     </div>
   );
