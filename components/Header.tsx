@@ -1,6 +1,7 @@
 "use client";
 
 import { signOut } from "next-auth/react";
+import Link        from "next/link";
 import ThemeToggle from "./ThemeToggle";
 import type { Theme } from "@/lib/theme";
 
@@ -58,13 +59,21 @@ export default function Header({
 
           <ThemeToggle pref={themePref} onCycle={onCycleTheme} />
 
-          <a
+          <Link
+            href="/weight"
+            className="text-xs text-text-muted hover:text-text px-2.5 py-1.5 rounded-lg
+                       hover:bg-surface-2 transition-colors focus-accent"
+          >
+            ⚖️ <span className="hidden sm:inline">Weight</span>
+          </Link>
+
+          <Link
             href="/admin"
             className="text-xs text-text-muted hover:text-text px-2.5 py-1.5 rounded-lg
                        hover:bg-surface-2 transition-colors focus-accent"
           >
             Admin
-          </a>
+          </Link>
 
           {/* User info + sign out */}
           {userEmail && (

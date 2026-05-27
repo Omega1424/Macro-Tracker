@@ -19,6 +19,7 @@ import GoalsDrawer          from "@/components/GoalsDrawer";
 import AddFoodModal         from "@/components/AddFoodModal";
 import SupplementChecklist  from "@/components/SupplementChecklist";
 import WaterTracker         from "@/components/WaterTracker";
+import WeightLogEntry       from "@/components/WeightLogEntry";
 
 /* ─────────────────────────────────────────────────────────── */
 
@@ -80,6 +81,7 @@ export default function HomePage() {
   const [customName,   setCustomName]   = useState("");
   const [suppChecks,   setSuppChecks]   = useState<Record<string, boolean>>({});
   const [waterMl,      setWaterMl]      = useState(0);
+  const [weightKg,     setWeightKg]     = useState<number | null>(null);
 
   const saveMealsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isToday = viewDate === todayStr();
@@ -112,11 +114,13 @@ export default function HomePage() {
       fetch("/api/user/goals").then((r) => r.ok ? r.json() : null),
       fetch(`/api/user/supplements?date=${viewDate}`).then((r) => r.ok ? r.json() : {}),
       fetch(`/api/user/water?date=${viewDate}`).then((r) => r.ok ? r.json() : 0),
-    ]).then(([savedMeals, savedGoals, savedChecks, savedWater]) => {
+      fetch(`/api/user/weight?date=${viewDate}`).then((r) => r.ok ? r.json() : null),
+    ]).then(([savedMeals, savedGoals, savedChecks, savedWater, savedWeight]) => {
       setMeals(savedMeals ? migrateMeals(savedMeals) : emptyPlan());
       if (savedGoals) setGoals({ ...DEFAULT_GOALS, ...savedGoals });
       setSuppChecks(savedChecks ?? {});
       setWaterMl(savedWater ?? 0);
+      setWeightKg(savedWeight ?? null);
       setHydrated(true);
     }).catch(() => setHydrated(true));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -402,6 +406,15 @@ export default function HomePage() {
             )}
           </div>
         </section>
+
+        {/* Weight log */}
+        <WeightLogEntry
+          date={viewDate}
+          initial={weightKg}
+          isFuture={viewDate > todayStr()}
+          onSaved={setWeightKg}
+        />
+
       </main>
 
       <footer className="text-center text-xs text-text-muted py-10">

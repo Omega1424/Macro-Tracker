@@ -129,3 +129,37 @@ export async function saveUserWater(userId: string, date: string, ml: number): P
   const redis = getRedis();
   await redis.set(`user:${userId}:water:${date}`, String(ml), { ex: 60 * 60 * 24 * 30 });
 }
+
+/* ── Weight log ─────────────────────────────────────────── */
+
+export interface WeightEntry { date: string; kg: number; }
+
+export async function getWeightLog(userId: string): Promise<WeightEntry[]> {
+  try {
+    const redis = getRedis();
+    const raw   = await redis.get(`user:${userId}:weight-log`);
+    if (!raw) return [];
+    const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+    return (Array.isArray(data) ? data : []) as WeightEntry[];
+  } catch (err) {
+    console.error("[userdb] getWeightLog error:", err);
+    return [];
+  }
+}
+
+export async function upsertWeightEntry(userId: string, date: string, kg: number): Promise<void> {
+  const redis   = getRedis();
+  const entries = await getWeightLog(userId);
+  const idx     = entries.findIndex((e) => e.date === date);
+  if (idx >= 0) entries[idx].kg = kg;
+  else          entries.push({ date, kg });
+  entries.sort((a, b) => a.date.localeCompare(b.date));
+  await redis.set(`user:${userId}:weight-log`, JSON.stringify(entries));
+}
+
+export async function deleteWeightEntry(userId: string, date: string): Promise<void> {
+  const redis   = getRedis();
+  const entries = await getWeightLog(userId);
+  const next    = entries.filter((e) => e.date !== date);
+  await redis.set(`user:${userId}:weight-log`, JSON.stringify(next));
+}
